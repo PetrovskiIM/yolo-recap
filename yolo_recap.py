@@ -3,6 +3,7 @@ from torch import Tensor, cat
 import torch.nn as nn
 from torch.nn.functional import interpolate
 from torch.nn import ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
+from config import number_of_classes, anchors
 
 filters_multiplier = 32
 negative_slope = 0.1
@@ -59,9 +60,9 @@ class Darknet(nn.Module):
         return outs[-3:]
 
 
-class YOLO(nn.Module):
+class Tail(nn.Module):
     def __init__(self):
-        super(YOLO, self).__init__()
+        super(Tail, self).__init__()
         self.backbone = Darknet()
         self.num_of_yolo_layers = 3
         route_streams = [0, 3, 2]
@@ -98,3 +99,77 @@ class YOLO(nn.Module):
             tensor = self.harmonics[2][j](tensor)
         out.append(self.prelude[2](tensor))
         return out
+
+
+class Head(nn.Module):
+    def __init__(self, scale, stride, anchors):
+        super(Head, self).__init__()
+        if scale == 's':
+            idx = (0, 1, 2)
+        elif scale == 'm':
+            idx = (3, 4, 5)
+        elif scale == 'l':
+            idx = (6, 7, 8)
+        else:
+            idx = None
+        self.anchors = torch.tensor([anchors[i] for i in idx])
+        self.stride = stride
+
+    def forward(self, x):
+        num_batch = x.size(0)
+        num_grid = x.size(2)
+
+        if self.training:
+            output_raw = x.view(num_batch,
+                                NUM_ANCHORS_PER_SCALE,
+                                NUM_ATTRIB,
+                                num_grid,
+                                num_grid).permute(0, 1, 3, 4, 2).contiguous().view(num_batch, -1, NUM_ATTRIB)
+            return output_raw
+        else:
+            prediction_raw = x.view(num_batch,
+                                    NUM_ANCHORS_PER_SCALE,
+                                    NUM_ATTRIB,
+                                    num_grid,
+                                    num_grid).permute(0, 1, 3, 4, 2).contiguous()
+
+            self.anchors = self.anchors.to(x.device).float()
+            # Calculate offsets for each grid
+            grid_tensor = torch.arange(num_grid, dtype=torch.float, device=x.device).repeat(num_grid, 1)
+            grid_x = grid_tensor.view([1, 1, num_grid, num_grid])
+            grid_y = grid_tensor.t().view([1, 1, num_grid, num_grid])
+            anchor_w = self.anchors[:, 0:1].view((1, -1, 1, 1))
+            anchor_h = self.anchors[:, 1:2].view((1, -1, 1, 1))
+
+            # Get outputs
+            x_center_pred = (torch.sigmoid(prediction_raw[..., 0]) + grid_x) * self.stride # Center x
+            y_center_pred = (torch.sigmoid(prediction_raw[..., 1]) + grid_y) * self.stride  # Center y
+
+            w_pred = torch.exp(prediction_raw[..., 2]) * anchor_w  # Width
+            h_pred = torch.exp(prediction_raw[..., 3]) * anchor_h  # Height
+
+            bbox_pred = torch.stack((x_center_pred,
+                                     y_center_pred,
+                                     w_pred,
+                                     h_pred), dim=4).view((num_batch, -1, 4)) #cxcywh
+            conf_pred = torch.sigmoid(prediction_raw[..., 4]).view(num_batch, -1, 1)  # Conf
+            class_predictions = torch.sigmoid(prediction_raw[..., 5:]).view(num_batch, -1, number_of_classes)  # Cls pred one-hot.
+
+            return cat((bbox_pred, conf_pred, class_predictions), -1)
+
+
+# class YOLO(nn.Module):
+#
+#     def __init__(self, nms=False, post=True):
+#         super(YoloNetV3, self).__init__()
+#         self.darknet = DarkNet53BackBone()
+#         self.yolo_tail = YoloNetTail()
+#         self.nms = nms
+#         self._post_process = post
+#
+#     def forward(self, x):
+#         tmp1, tmp2, tmp3 = self.darknet(x)
+#         out1, out2, out3 = self.yolo_tail(tmp1, tmp2, tmp3)
+#         out = torch.cat((out1, out2, out3), 1)
+#         logging.debug("The dimension of the output before nms is {}".format(out.size()))
+#         return out
