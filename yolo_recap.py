@@ -1,5 +1,5 @@
 import torch
-from torch import Tensor
+from torch import Tensor, cat
 import torch.nn as nn
 from torch.nn.functional import interpolate
 from torch.nn import ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
@@ -51,48 +51,50 @@ class Darknet(nn.Module):
 
     def forward(self, tensor_image):
         tensor = self.into(tensor_image)
-
+        outs = []
         for i, num_of_repetitions in enumerate([2, 8, 8, 4]):
             for j in range(num_of_repetitions):
                 tensor += self.module_list[i][j](tensor)
-        return tensor
+            outs.append(tensor)
+        return outs[-3:]
 
 
 class YOLO(nn.Module):
     def __init__(self):
         super(YOLO, self).__init__()
         self.backbone = Darknet()
-        num_of_yolo_layers = 3
+        self.num_of_yolo_layers = 3
+        route_streams = [0, 3, 2]
         self.harmonics = ModuleList([
             ModuleList(
-                [Sequential(Conv2d(2 ** (5 - i) * filters_multiplier, 2 ** (4 - i) * filters_multiplier, **bottleneck),
+                [Sequential(Conv2d(2 ** (5 - i + route_streams[i]) * filters_multiplier,
+                                   2 ** (4 - i) * filters_multiplier, **bottleneck),
                             BatchNorm2d(2 ** (4 - i) * filters_multiplier),
                             LeakyReLU(negative_slope),
                             Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
                             BatchNorm2d(2 ** (5 - i) * filters_multiplier),
-                            LeakyReLU(negative_slope))] * 3) for i in range(num_of_yolo_layers)])
+                            LeakyReLU(negative_slope))] * 3) for i in range(self.num_of_yolo_layers)])
+        self.preludes = ModuleList([
+            self.Sequential(Conv2d(2 ** (5-i) * filters_multiplier, 255, **bottleneck),
+                            BatchNorm2d(255)) for i in range(self.num_of_yolo_layers)])
+        self.equalizers_for_routes = ModuleList([
+            interpolate(Sequential(
+                Conv2d(2 ** (4-i) * filters_multiplier, 2 ** (3-i) * filters_multiplier, **bottleneck),
+                BatchNorm2d(2 ** (3-i) * filters_multiplier),
+                LeakyReLU(negative_slope)
+            ), scale_factor=2) for i in range(self.num_of_yolo_layers-1)])
 
-        self.prelude1 = self.Sequential(Conv2d(2 ** 4 * filters_multiplier, 255, **bottleneck),
-                                        BatchNorm2d(255))
-        # self.prelude2 = self.Sequential(Conv2d(!!!!, 255, ** bottleneck)
-
-    def forward(self, tensor):
-        darknet_features = self.darknet(tensor)
-
-        tensor = self.harmonics[0][0](darknet_features)
-        route_host = self.harmonics[0][1](tensor)
-        tensor = self.harmonics[0][2](route_host)
-        tensor = self.prelude1(tensor)
-        self.yolo()
-
-        tensor = self.harmonics[1][0](darknet_features)
-        route_host = self.harmonics[1][1](tensor)
-        tensor = self.harmonics[1][2](route_host)
-        tensor = self.prelude2(tensor)
-        self.yolo()
-        tensor = self.harmonics[2][0](darknet_features)
-        route_host = self.harmonics[2][1](tensor)
-        tensor = self.harmonics[2][2](route_host)
-        tensor = self.prelude2(tensor)
-        self.yolo()
-        return x
+    def forward(self, routes_hosts):
+        out = []
+        tensor = routes_hosts[-1]
+        for i in range(self.num_of_yolo_layers - 1):
+            tensor = self.harmonics[i][0](tensor)
+            route_host = self.harmonics[i][1](tensor)
+            tensor = self.harmonics[i][2](route_host)
+            out.append(self.preludes[i](tensor))
+            tensor = self.equalizers_for_routes[i](route_host)
+            tensor = cat(tensor, routes_hosts[-2 - i])
+        for j in range(3):
+            tensor = self.harmonics[2][j](tensor)
+        out.append(self.prelude[2](tensor))
+        return out
