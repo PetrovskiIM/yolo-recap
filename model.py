@@ -115,9 +115,9 @@ class Tail(nn.Module):
         return out
 
 
-# class Head(nn.Module):
-#     def __init__(self, scale, anchors):
-#         super(Head, self).__init__()
+class Head(nn.Module):
+    def __init__(self, anchors, number_classes, network_width):
+         super(YOLO, self).__init__()
 #
 #     def forward(self, tensor):
 #         # batch_size x S x S x (B*5 +C) = 255
@@ -150,16 +150,16 @@ class Tail(nn.Module):
 #
 #         return cat((bbox_pred, conf_pred, class_predictions), -1)
 #
-
-class YOLO(nn.Module):
-
-    def __init__(self, nms=0, thresh=0, hier_thresh=0, post=True):
-        super(YOLO, self).__init__()
-        self.darknet = Darknet()
-        self.tail = Tail()
-
-    def forward(self, image):
-        features = self.darknet(image)
-        liage_1, leage_2, leage_3 = self.tail(features)
-
-        return liage_1
+#
+# class YOLO(nn.Module):
+#
+#     def __init__(self, nms=0, thresh=0, hier_thresh=0, post=True):
+#         super(YOLO, self).__init__()
+#         self.darknet = Darknet()
+#         self.tail = Tail()
+#
+#     def forward(self, image):
+#         features = self.darknet(image)
+#         liage_1, leage_2, leage_3 = self.tail(features)
+#
+#         return liage_1
