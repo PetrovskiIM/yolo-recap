@@ -12,10 +12,10 @@ bottleneck = {
     "kernel_size": 1,
     "stride": 1,
     "padding": 0,
-    "bias": False
+    "bias": True
 }
 
-downsample = {
+down_sample = {
     "kernel_size": 3,
     "stride": 2,
     "padding": 1,
@@ -34,11 +34,11 @@ class Darknet(nn.Module):
     def __init__(self):
         super(Darknet, self).__init__()
         self.intro = Sequential(Conv2d(3, 2 ** 0 * filters_multiplier, **casual),
-                               BatchNorm2d(filters_multiplier),
-                               LeakyReLU(negative_slope))
+                                BatchNorm2d(filters_multiplier),
+                                LeakyReLU(negative_slope))
         self.module_list = ModuleList([
             ModuleList(
-                [Sequential(Conv2d(2 ** i * filters_multiplier, 2 ** (i + 1) * filters_multiplier, **downsample),
+                [Sequential(Conv2d(2 ** i * filters_multiplier, 2 ** (i + 1) * filters_multiplier, **down_sample),
                             BatchNorm2d(2 ** (i + 1) * filters_multiplier),
                             LeakyReLU(negative_slope))] +
                 [Sequential(Conv2d(2 ** (i + 1) * filters_multiplier, 2 ** i * filters_multiplier, **bottleneck),
@@ -56,7 +56,7 @@ class Darknet(nn.Module):
         for i, num_of_repetitions in enumerate([1, 2, 8, 8, 4]):
             tensor = self.module_list[i][0](tensor)
             for j in range(num_of_repetitions):
-                tensor += self.module_list[i][j+1](tensor)
+                tensor += self.module_list[i][j + 1](tensor)
             outs.append(tensor)
         return outs[-3:]
 
@@ -64,18 +64,33 @@ class Darknet(nn.Module):
 class Tail(nn.Module):
     def __init__(self):
         super(Tail, self).__init__()
-        self.backbone = Darknet()
         self.num_of_yolo_layers = 3
-        route_streams = [0, 3, 2]
-        self.harmonics = ModuleList([
-            ModuleList(
-                [Sequential(Conv2d(2 ** (5 - i + route_streams[i]) * filters_multiplier,
-                                   2 ** (4 - i) * filters_multiplier, **bottleneck),
-                            BatchNorm2d(2 ** (4 - i) * filters_multiplier),
-                            LeakyReLU(negative_slope),
-                            Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
-                            BatchNorm2d(2 ** (5 - i) * filters_multiplier),
-                            LeakyReLU(negative_slope))] * 3) for i in range(self.num_of_yolo_layers)])
+        route_streams = [0, 2 ** 3, 2 ** 2]
+        self.harmonics = ModuleList([Sequential(
+            Conv2d((2 ** (5 - i) + route_streams[i]) * filters_multiplier, 2 ** (4 - i) * filters_multiplier,
+                   **bottleneck),
+            BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+            LeakyReLU(negative_slope),
+            Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+            BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+            LeakyReLU(negative_slope),
+            Conv2d(2 ** (5 - i) * filters_multiplier,
+                   2 ** (4 - i) * filters_multiplier, **bottleneck),
+            BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+            LeakyReLU(negative_slope),
+            Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+            BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+            LeakyReLU(negative_slope)) for i in range(self.num_of_yolo_layers)])
+        self.splitted_harmonic = ModuleList([
+            ModuleList([
+                Sequential(
+                    Conv2d(2 ** (5 - i) * filters_multiplier, 2 ** (4 - i) * filters_multiplier, **bottleneck),
+                    BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope)),
+                Sequential(
+                    Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+                    BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope))]) for i in range(self.num_of_yolo_layers)])
         self.preludes = ModuleList([
             Sequential(Conv2d(2 ** (5 - i) * filters_multiplier, 255, **bottleneck),
                        BatchNorm2d(255)) for i in range(self.num_of_yolo_layers)])
@@ -88,17 +103,15 @@ class Tail(nn.Module):
 
     def forward(self, routes_hosts):
         out = []
-        tensor = routes_hosts[-1]
-        for i in range(self.num_of_yolo_layers - 1):
-            tensor = self.harmonics[i][0](tensor)
-            route_host = self.harmonics[i][1](tensor)
-            tensor = self.harmonics[i][2](route_host)
+        tensor = routes_hosts[-1]  # 1 x 1024 x 13 x 13
+        for i in range(self.num_of_yolo_layers):
+            tensor = self.harmonics[i](tensor)
+            route_host = self.splitted_harmonic[i][0](tensor)
+            tensor = self.splitted_harmonic[i][1](route_host)
             out.append(self.preludes[i](tensor))
-            tensor = interpolate(self.equalizers_for_routes[i](route_host), scale_factor=2)
-            tensor = cat(tensor, routes_hosts[-2 - i])
-        for j in range(3):
-            tensor = self.harmonics[2][j](tensor)
-        out.append(self.prelude[2](tensor))
+            if i < 2:
+                tensor = interpolate(self.equalizers_for_routes[i](route_host), scale_factor=2)
+                tensor = cat((tensor, routes_hosts[-2 - i]), 1)
         return out
 
 
