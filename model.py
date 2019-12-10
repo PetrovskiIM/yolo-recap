@@ -35,6 +35,7 @@ prelude = {
     "bias": True
 }
 
+
 class Darknet(nn.Module):
     def __init__(self):
         super(Darknet, self).__init__()
@@ -121,18 +122,36 @@ class Tail(nn.Module):
 
 
 class Head(nn.Module):
-    def __init__(self, anchors, number_of_classes=1, network_shape=[416, 416]):
+    def __init__(self, anchors, number_of_classes=1):
         super(Head, self).__init__()
-        self.network_shape = network_shape
         self.number_of_classes = number_of_classes
         self.anchors = anchors
+        self.anchors_width = self.anchors[:, 0:1].view((1, len(self.anchors), 1, 1))
+        self.anchors_height = self.anchors[:, 1:2].view((1, len(self.anchors), 1, 1))
 
     def forward(self, features):
-        grid_size = features.size()[-2:]
-        stride = self.network_shape[0] / grid_size[0]
+        grid_size = list(features.size()[-2:])
+        grid_x = torch.arange(grid_size[0]).repeat(grid_size[1], 1).view([1, 1, grid_size[0], grid_size[1]])
+        grid_y = torch.arange(grid_size[1]).repeat(grid_size[0], 1).t().view([1, 1, grid_size[0], grid_size[1]])
+        stride = 1 / grid_size[0]
+        features = features.view([features.size(0), len(self.anchors), self.number_of_classes + 5] + grid_size) \
+            .permute(0, 1, 3, 4, 2) \
+            .contiguous()
+        center_x = (sigmoid(features[..., 0]) + grid_x) * stride
+        center_y = (sigmoid(features[..., 1]) + grid_y) * stride
+        width = exp(features[..., 2]) * self.anchors_width
+        height = exp(features[..., 3]) * self.anchors_height
 
-        grid = 3
-#
+        confidence = sigmoid(features[..., 4])
+        one_fold_class = sigmoid(features[..., 5:])
+
+        boxes = cat((center_x, center_y, width, height))
+
+        return cat(
+            (confidence.view(features.size(0), -1, 1),
+             boxes.view(features.size(0), -1, 4)), -1
+        )
+
 #     def forward(self, tensor):
 #         # batch_size x S x S x (B*5 +C) = 255
 #         batch_size = tensor.size(0)
