@@ -44,8 +44,9 @@ def parse_darknet_weight(flatten_weights, model):
 darknet_state_dict, unused_weights = parse_darknet_weight(weights, darknet)
 tail_state_dict, unused_weights = parse_darknet_weight(unused_weights, tail)
 
-darknet.load_state_dict(darknet_state_dict)
-tail.load_state_dict(tail_state_dict)
+darknet = darknet.load_state_dict(darknet_state_dict)
+tail = tail.load_state_dict(tail_state_dict)
+
 
 print(unused_weights.shape)
 #print(initial_detections[0] == tail(darknet(image.unsqueeze(0)))[0])
