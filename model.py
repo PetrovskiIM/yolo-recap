@@ -1,5 +1,5 @@
 import torch
-from torch import Tensor, cat, sigmoid, exp
+from torch import Tensor, cat, sigmoid, exp, arange, meshgrid, linspace, stack
 import torch.nn as nn
 from torch.nn.functional import interpolate
 from torch.nn import ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
@@ -125,139 +125,88 @@ class Head(nn.Module):
     def __init__(self, anchors, number_of_classes=1):
         super(Head, self).__init__()
         self.number_of_classes = number_of_classes
-        self.anchors = anchors
-        self.anchors_width = self.anchors[:, 0].view(1, len(self.anchors), 1, 1)
-        self.anchors_height = self.anchors[:, 1].view(1, len(self.anchors), 1, 1)
+        self.anchors = anchors.view(3, 1, 1, 2)
 
     def forward(self, features):
-        grid_size = list(features.size()[-2:])
-        cells_offsets_x = torch.arange(0, 1, 1/grid_size[0]).repeat(grid_size[1], 1).view([1, 1, grid_size[0], grid_size[1]])
-        cells_offsets_y = torch.arange(0, 1, 1/grid_size[0]).repeat(grid_size[0], 1).t().view([1, 1, grid_size[0], grid_size[1]])
-        stride = 1. / grid_size[0]
-        features = features.view([features.size(0),
-                                  len(self.anchors),
-                                  self.number_of_classes + 5] + grid_size) \
+        grid_size = Tensor(features.size()[-2:])
+        cells_offsets_x, cells_offsets_y = stack(meshgrid(linspace(0, 1, grid_size[0]),
+                                                          linspace(0, 1, grid_size[1]).t()), -1)
+        features = features.view([-1, len(self.anchors), self.number_of_classes + 5, grid_size[1], grid_size[2]]) \
             .permute(0, 1, 3, 4, 2) \
             .contiguous()
+        centers = sigmoid(features[..., :2]) / grid_size + cells_offsets_x
+        sizes = exp(features[..., 2:4]) * self.anchors
+        probabilities = sigmoid(features[..., 4:])
+        return centers, sizes, probabilities
 
-        center_x = sigmoid(features[..., 0]) / grid_size[0] + cells_offsets_x
-        center_y = sigmoid(features[..., 1]) / grid_size[1] + cells_offsets_y
-        width = exp(features[..., 2]) * self.anchors_width
-        height = exp(features[..., 3]) * self.anchors_height
-        confidence = sigmoid(features[..., 4])
-        one_fold_class = sigmoid(features[..., 5:])
-
-        boxes = cat((
-            confidence.unsqueeze(-1),
-            center_x.unsqueeze(-1),
-            center_y.unsqueeze(-1),
-            width.unsqueeze(-1),
-            height.unsqueeze(-1)),-1)        # print(boxes)
-        return boxes.view(features.size(0),
-                          grid_size[0]*grid_size[0]*len(self.anchors), 5)
-
-#     def forward(self, tensor):
-#         # batch_size x S x S x (B*5 +C) = 255
-#         batch_size = tensor.size(0)
-#         grid_size = tensor.size(2)
+# def bbox_iou(box1, box2, x1y1x2y2=True):
+#     """
+#     Returns the IoU of two bounding boxes
+#     """
+#     if not x1y1x2y2:
+#         # Transform from center and width to exact coordinates
+#         b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
+#         b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] / 2, box1[:, 1] + box1[:, 3] / 2
+#         b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] / 2, box2[:, 0] + box2[:, 2] / 2
+#         b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
+#     else:
+#         # Get the coordinates of bounding boxes
+#         b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+#         b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
 #
-#         #self.anchors = self.anchors.to(x.device).float()
-#         # Calculate offsets for each grid
-#         #grid_tensor = torch.arange(num_grid, dtype=torch.float, device=x.device).repeat(num_grid, 1)
+#     # get the corrdinates of the intersection rectangle
+#     inter_rect_x1 = torch.max(b1_x1, b2_x1)
+#     inter_rect_y1 = torch.max(b1_y1, b2_y1)
+#     inter_rect_x2 = torch.min(b1_x2, b2_x2)
+#     inter_rect_y2 = torch.min(b1_y2, b2_y2)
+#     # Intersection area
+#     inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+#         inter_rect_y2 - inter_rect_y1 + 1, min=0
+#     )
+#     # Union Area
+#     b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+#     b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
 #
-#         grid_x = grid_tensor.view([1, 1, grid_size, grid_size])
-#         grid_y = grid_tensor.t().view([1, 1, grid_size, grid_size])
+#     iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
 #
-#         #anchor_w = self.anchors[:, 0:1].view((1, -1, 1, 1))
-#         #anchor_h = self.anchors[:, 1:2].view((1, -1, 1, 1))
+#     return iou
 #
-#         # Get outputs
-#         x_center_pred = sigmoid(tensor[..., 0]) + grid_x #* self.stride  # Center x
-#         y_center_pred = sigmoid(tensor[..., 1]) + grid_y #* self.stride  # Center y
 #
-#         w_pred = exp(tensor[..., 2]) #* anchor_w  # Width
-#         h_pred = exp(tensor[..., 3]) #* anchor_h  # Height
+# def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
+#     """
+#     Removes detections with lower object confidence score than 'conf_thres' and performs
+#     Non-Maximum Suppression to further filter detections.
+#     Returns detections with shape:
+#         (x1, y1, x2, y2, object_conf, class_score, class_pred)
+#     """
 #
-#         bbox_pred = torch.stack((x_center_pred,
-#                                  y_center_pred,
-#                                  w_pred,
-#                                  h_pred), dim=4).view((num_batch, -1, 4))  # cxcywh
-#         conf_pred = sigmoid(prediction_raw[..., 4]).view(num_batch, -1, 1)  # Conf
-#         class_predictions = sigmoid(prediction_raw[..., 5:]).view(num_batch, -1, number_of_classes)  # Cls pred one-hot.
-#
-#         return cat((bbox_pred, conf_pred, class_predictions), -1)
-#         if targets is None:
-#             return output, 0
-#         else:
-#             iou_scores, \
-#             class_mask, \
-#             obj_mask, \
-#             noobj_mask, \
-#             tx, \
-#             ty, \
-#             tw, \
-#             th, \
-#             tcls, \
-#             tconf = build_targets(
-#                 pred_boxes=pred_boxes,
-#                 pred_cls=pred_cls,
-#                 target=targets,
-#                 anchors=self.scaled_anchors,
-#                 ignore_thres=self.ignore_thres,
-#             )
-#
-#             # Loss : Mask outputs to ignore non-existing objects (except with conf. loss)
-#             loss_x = self.mse_loss(x[obj_mask], tx[obj_mask])
-#             loss_y = self.mse_loss(y[obj_mask], ty[obj_mask])
-#             loss_w = self.mse_loss(w[obj_mask], tw[obj_mask])
-#             loss_h = self.mse_loss(h[obj_mask], th[obj_mask])
-#             loss_conf_obj = self.bce_loss(pred_conf[obj_mask], tconf[obj_mask])
-#             loss_conf_noobj = self.bce_loss(pred_conf[noobj_mask], tconf[noobj_mask])
-#             loss_conf = self.obj_scale * loss_conf_obj + self.noobj_scale * loss_conf_noobj
-#             loss_cls = self.bce_loss(pred_cls[obj_mask], tcls[obj_mask])
-#             total_loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
-#
-#             # Metrics
-#             cls_acc = 100 * class_mask[obj_mask].mean()
-#             conf_obj = pred_conf[obj_mask].mean()
-#             conf_noobj = pred_conf[noobj_mask].mean()
-#             conf50 = (pred_conf > 0.5).float()
-#             iou50 = (iou_scores > 0.5).float()
-#             iou75 = (iou_scores > 0.75).float()
-#             detected_mask = conf50 * class_mask * tconf
-#             precision = torch.sum(iou50 * detected_mask) / (conf50.sum() + 1e-16)
-#             recall50 = torch.sum(iou50 * detected_mask) / (obj_mask.sum() + 1e-16)
-#             recall75 = torch.sum(iou75 * detected_mask) / (obj_mask.sum() + 1e-16)
-#
-#             self.metrics = {
-#                 "loss": to_cpu(total_loss).item(),
-#                 "x": to_cpu(loss_x).item(),
-#                 "y": to_cpu(loss_y).item(),
-#                 "w": to_cpu(loss_w).item(),
-#                 "h": to_cpu(loss_h).item(),
-#                 "conf": to_cpu(loss_conf).item(),
-#                 "cls": to_cpu(loss_cls).item(),
-#                 "cls_acc": to_cpu(cls_acc).item(),
-#                 "recall50": to_cpu(recall50).item(),
-#                 "recall75": to_cpu(recall75).item(),
-#                 "precision": to_cpu(precision).item(),
-#                 "conf_obj": to_cpu(conf_obj).item(),
-#                 "conf_noobj": to_cpu(conf_noobj).item(),
-#                 "grid_size": grid_size,
-#             }
-#
-#             return output, total_loss
-
-
-# class YOLO(nn.Module):
-#
-#     def __init__(self, nms=0, thresh=0, hier_thresh=0, post=True):
-#         super(YOLO, self).__init__()
-#         self.darknet = Darknet()
-#         self.tail = Tail()
-#
-#     def forward(self, image):
-#         features = self.darknet(image)
-#         liage_1, leage_2, leage_3 = self.tail(features)
-#
-#         return liage_1
+#     # From (center x, center y, width, height) to (x1, y1, x2, y2)
+#     prediction[..., :4] = xywh2xyxy(prediction[..., :4])
+#     output = [None for _ in range(len(prediction))]
+#     for image_i, image_pred in enumerate(prediction):
+#         # Filter out confidence scores below threshold
+#         image_pred = image_pred[image_pred[:, 4] >= conf_thres]
+#         # If none are remaining => process next image
+#         if not image_pred.size(0):
+#             continue
+#         # Object confidence times class confidence
+#         score = image_pred[:, 4] * image_pred[:, 5:].max(1)[0]
+#         # Sort by it
+#         image_pred = image_pred[(-score).argsort()]
+#         class_confs, class_preds = image_pred[:, 5:].max(1, keepdim=True)
+#         detections = torch.cat((image_pred[:, :5], class_confs.float(), class_preds.float()), 1)
+#         # Perform non-maximum suppression
+#         keep_boxes = []
+#         while detections.size(0):
+#             large_overlap = bbox_iou(detections[0, :4].unsqueeze(0), detections[:, :4]) > nms_thres
+#             label_match = detections[0, -1] == detections[:, -1]
+#             # Indices of boxes with lower confidence scores, large IOUs and matching labels
+#             invalid = large_overlap & label_match
+#             weights = detections[invalid, 4:5]
+#             # Merge overlapping bboxes by order of confidence
+#             detections[0, :4] = (weights * detections[invalid, :4]).sum(0) / weights.sum()
+#             keep_boxes += [detections[0]]
+#             detections = detections[~invalid]
+#         if keep_boxes:
+#             output[image_i] = torch.stack(keep_boxes)
+#     return output
