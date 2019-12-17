@@ -22,34 +22,108 @@ print(seen)
 darknet = Darknet()
 tail = Tail(1, [3, 3, 3])
 
+
 def parse_darknet_weight(flatten_weights, model):
     checkpoint = model.state_dict()
     new_dict = checkpoint.copy()
-    for param_tensor in checkpoint:
-        if param_tensor.endswith("weight") or \
-                param_tensor.endswith("running_mean") or \
-                param_tensor.endswith("running_var") or \
-                param_tensor.endswith("bias"):
-            size_expected_by_model = checkpoint[param_tensor].size()
-
-            length_expected_by_model = np.prod(size_expected_by_model)
-            new_dict[param_tensor] = \
-                torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model)
-            flatten_weights = flatten_weights[length_expected_by_model:]
+    endings = ["bias", "weight", "running_mean", "running_var"]
+    previous = ""
+    for layer in checkpoint:
+        if previous != ".".join(layer.split(".")[:-1]):
+            previous = ".".join(layer.split(".")[:-1])
+            if layer.split(".")[-1] in ["bias", "weight", "running_mean", "running_var"]:
+                unordered_keys = [".".join(layer.split(".")[:-1]) + "." + ending for ending in endings]
+                if (unordered_keys[0] in checkpoint.keys()) & \
+                        (unordered_keys[1] in checkpoint.keys()) & \
+                        (unordered_keys[2] in checkpoint.keys()) & \
+                        (unordered_keys[3] in checkpoint.keys()):
+                    for unordered_key in unordered_keys:
+                      #  print(unordered_key)
+                        size_expected_by_model = checkpoint[unordered_key].size()
+                        length_expected_by_model = np.prod(size_expected_by_model)
+                        new_dict[unordered_key] = \
+                            torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model)
+                        flatten_weights = flatten_weights[length_expected_by_model:]
+                elif (unordered_keys[0] in checkpoint.keys()) & \
+                        (unordered_keys[1] in checkpoint.keys()):
+                    for unordered_key in unordered_keys[:2]:
+                    #    print(unordered_key)
+                        size_expected_by_model = checkpoint[unordered_key].size()
+                        length_expected_by_model = np.prod(size_expected_by_model)
+                        new_dict[unordered_key] = \
+                            torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model)
+                        flatten_weights = flatten_weights[length_expected_by_model:]
+                elif unordered_keys[1] in checkpoint.keys():
+                    unordered_key = unordered_keys[1]
+                 #   print(unordered_key)
+                    size_expected_by_model = checkpoint[unordered_key].size()
+                    length_expected_by_model = np.prod(size_expected_by_model)
+                    new_dict[unordered_key] = \
+                        torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model)
+                    flatten_weights = flatten_weights[length_expected_by_model:]
     return new_dict, flatten_weights
 
+
+def parse_tail_weight(flatten_weights, model):
+    checkpoint = model.state_dict()
+    new_dict = checkpoint.copy()
+    endings = ["bias", "weight", "running_mean", "running_var"]
+    previous = ""
+    for i in range(3):
+        for layer_type in ["harmonics", "splitted_harmonic", "preludes", "equalizers_for_routes"]:
+            for layer in checkpoint:
+                if layer_type in layer:
+                    if int(layer.split(".")[1]) == i:
+                        if previous != ".".join(layer.split(".")[:-1]):
+                            previous = ".".join(layer.split(".")[:-1])
+                            if layer.split(".")[-1] in ["bias", "weight", "running_mean", "running_var"]:
+                                unordered_keys = [".".join(layer.split(".")[:-1]) + "." + ending for ending in endings]
+                                if (unordered_keys[0] in checkpoint.keys()) & \
+                                        (unordered_keys[1] in checkpoint.keys()) & \
+                                        (unordered_keys[2] in checkpoint.keys()) & \
+                                        (unordered_keys[3] in checkpoint.keys()):
+                                    for unordered_key in unordered_keys:
+                                        print(unordered_key)
+                                        size_expected_by_model = checkpoint[unordered_key].size()
+                                        length_expected_by_model = np.prod(size_expected_by_model)
+                                        new_dict[unordered_key] = \
+                                            torch.from_numpy(flatten_weights[:length_expected_by_model]).view(
+                                                size_expected_by_model)
+                                        flatten_weights = flatten_weights[length_expected_by_model:]
+                                elif (unordered_keys[0] in checkpoint.keys()) & \
+                                        (unordered_keys[1] in checkpoint.keys()):
+                                    for unordered_key in unordered_keys[:2]:
+                                        print(unordered_key)
+                                        size_expected_by_model = checkpoint[unordered_key].size()
+                                        length_expected_by_model = np.prod(size_expected_by_model)
+                                        new_dict[unordered_key] = \
+                                            torch.from_numpy(flatten_weights[:length_expected_by_model]).view(
+                                                size_expected_by_model)
+                                        flatten_weights = flatten_weights[length_expected_by_model:]
+                                elif unordered_keys[1] in checkpoint.keys():
+                                    unordered_key = unordered_keys[1]
+                                    print(unordered_key)
+                                    size_expected_by_model = checkpoint[unordered_key].size()
+                                    length_expected_by_model = np.prod(size_expected_by_model)
+                                    new_dict[unordered_key] = \
+                                        torch.from_numpy(flatten_weights[:length_expected_by_model]).view(
+                                            size_expected_by_model)
+                                    flatten_weights = flatten_weights[length_expected_by_model:]
+    return new_dict, flatten_weights
+
+
 darknet_state_dict, unused_weights = parse_darknet_weight(weights, darknet)
-tail_state_dict, unused_weights = parse_darknet_weight(unused_weights, tail)
+tail_state_dict, unused_weights = parse_tail_weight(unused_weights, tail)
 
-darknet.load_state_dict(darknet_state_dict)
-tail.load_state_dict(tail_state_dict)
+# darknet.load_state_dict(darknet_state_dict)
+# tail.load_state_dict(tail_state_dict)
+#
+# anchors = Tensor([[13. / 416, 16. / 416], [11. / 416, 35. / 416], [22. / 416, 24. / 416]])
+# head = Head(anchors)
+#
+# center, sizes, probs = head(tail(darknet(image.unsqueeze(0)))[0]).detach().numpy()[0]
+# print(center.size())
 
-anchors = Tensor([[13. / 416, 16. / 416], [11. / 416, 35. / 416], [22. / 416, 24. / 416]])
-head = Head(anchors)
-
-
-center, sizes, probs = head(tail(darknet(image.unsqueeze(0)))[0]).detach().numpy()[0]
-ll = pd.DataFrame(center)
 # # lines = 3
 # ll = pd.DataFrame(lines)
 # ll[0] = 0
