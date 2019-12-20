@@ -1,8 +1,6 @@
-import torch
 from torch import Tensor, cat, sigmoid, exp, meshgrid, linspace, stack
-import torch.nn as nn
 from torch.nn.functional import interpolate
-from torch.nn import ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
+from torch.nn import Module, ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
 
 filters_multiplier = 32
 negative_slope = 0.1
@@ -36,7 +34,7 @@ prelude = {
 }
 
 
-class Darknet(nn.Module):
+class Darknet(Module):
     def __init__(self):
         super(Darknet, self).__init__()
         self.intro = Sequential(Conv2d(3, 2 ** 0 * filters_multiplier, **casual),
@@ -67,7 +65,7 @@ class Darknet(nn.Module):
         return outs[-3:]
 
 
-class Tail(nn.Module):
+class Tail(Module):
     def __init__(self, number_of_classes, anchors_dims):
         super(Tail, self).__init__()
         self.num_of_yolo_layers = 3
@@ -121,7 +119,7 @@ class Tail(nn.Module):
         return out
 
 
-class Head(nn.Module):
+class Head(Module):
     def __init__(self, anchors, number_of_classes=1):
         super(Head, self).__init__()
         self.number_of_classes = number_of_classes
@@ -140,7 +138,7 @@ class Head(nn.Module):
         return centers, sizes, probabilities
 
 
-class Yolo(nn.Module):
+class Yolo(Module):
     def __init__(self, anchors, anchors_dim, number_of_classes=1):
         super(Yolo, self).__init__()
         self.feature_extractor = Darknet()
