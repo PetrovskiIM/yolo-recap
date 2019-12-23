@@ -76,36 +76,41 @@ def noobject_mask_filter(mask_noobject: Tensor, index_object_1d: Tensor):
 anchors = Tensor([[1, 2], [3, 4], [5, 6]])
 
 
-def build_targets(ground_trues_boxes, grid_size):
+def build_targets(ground_trues_boxes, grid_sizes, head_indexes, anchors):
+    def inverse_of_sigmoid(tensor):
+        return log(tensor / (1. - tensor))
+    area1, area2 = prod(ground_trues_boxes[..., 2:], -1), prod(anchors, -1)
+    intersection_area = prod(min(ground_trues_boxes[..., 2:].unsqueeze(-2), anchors), -1)
+    anchors_suitability_measured_by_iou = intersection_area / (
+            area1.unsqueeze(-1) + area2 - intersection_area + epsilon)
+    # anchors_correspondence = argmax(anchors_suitability_measured_by_iou, dim=-1) # batch size x number of boxes
+    anchors_assigment = (anchors_suitability_measured_by_iou == max(anchors_suitability_measured_by_iou))
+    anchors_index_assigment = argmax(anchors_suitability_measured_by_iou, dim=-1)
 
-    # gound_trues_boxes:  BATCH_SIZE x NUMBER OF BOXES x NUMBER_OF_CLASSES + 4
-    # anchors: NUMBER OF ANCHIRS x 2
-    cells_without_
-    (ground_trues_boxes // (1 / grid_size)).int()
+    output = []
+    for grid_size in grid_sizes:
+        cells_offsets = stack(meshgrid(linspace(0, 1 - 1 / grid_size[0], grid_size[0]),
+                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1]).t()), -1)
+        cells_coordinates = cells_offsets // (1. / Tensor(grid_size))
+        ground_boxes_coordinates = ground_trues_boxes[..., :2].unsqueeze(-2).unsqueeze(-2) // (1. / Tensor(grid_size))
+        coordinates_match = (ground_boxes_coordinates == cells_coordinates)
+        corresponding_anchors = index_select(anchors, 0, anchors_index_assigment.view(-1)).view(
+            list(anchors_index_assigment.size())+[2])
+        target_sizes = log((ground_trues_boxes[..., 2:] / corresponding_anchors).clamp(min=epsilon))
+        presense_of_objects = coordinates_match[..., 0] & coordinates_match[..., 1]
+        object_mask = anchors_assigment.view(-1).repeat(grid_size).view(
+            list(presense_of_objects.size()) + [len(anchors)]) & presense_of_objects.unsqueeze(-1)
+        if max(torch.sum(object_mask, dim=1)) > 1:
+            raise ValueError
+        grid_offsets = ground_trues_boxes[..., :2] // (1 / Tensor(grid_size))
+        sigmoid_of_target_centers = (ground_trues_boxes[..., :2] / Tensor(grid_size) - grid_offsets).clamp(epsilon, 1 - epsilon)
+        target_centers = inverse_of_sigmoid(sigmoid_of_target_centers)
 
-    index_select()
-
-
-
-    area1, area2 = prod(anchors, -1), prod(ground_trues_boxes[..., 2:], -1)
-    intersection_area = prod(min(anchors, ground_trues_boxes[..., :2].unsqueeze(-2)), -1)
-    anchors_suitability_measured_by_iou = intersection_area / (area1 + area2 - intersection_area + epsilon)
-    index_anchor = argmax(anchors_suitability_measured_by_iou, dim=-2)
-
-
-    grid_offsets = ground_trues_boxes[..., :2] // grid_size
-
-
-    # calculate t_x and t_y
-    target_centers = map(lambda c: log(c / (1. - c)),
-                         (ground_trues_boxes[..., :2] / grid_size - grid_offsets).clamp(epsilon, 1 - epsilon))
-
-    # calculate t_w and t_h
-    corresponding_anchors = index_select(anchors, 0, index_anchor.view(-1)).reshape_as(index_anchor)
-    target_sizes = log((ground_trues_boxes[..., 2:] / corresponding_anchors).clamp(min=epsilon))
-
-    # the raw target tensor
-    return cat((target_centers, target_sizes), dim=-1)
+        output.append(cat((matmul(target_centers.unsqueeze(-1)[..., 0], object_mask.float()),
+                           matmul(target_centers.unsqueeze(-1)[..., 1], object_mask.float()),
+                           matmul(target_sizes.unsqueeze(-1)[..., 0], object_mask.float()),
+                           matmul(target_sizes.unsqueeze(-1)[..., 0], object_mask.float())), -1))
+    return output
 
 
 def count_iou(boxes1, boxes2):
