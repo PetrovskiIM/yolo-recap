@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torch import Tensor, cat, index_select, \
-    sigmoid, exp, meshgrid, linspace, stack, log, min, max, matmul, abs, prod, where, argmax
+from torch import Tensor, cat, index_select,zeros, \
+    sigmoid, exp, meshgrid, linspace, stack, log, min, max, matmul, abs, prod, where, argmax, ones_like, zeros_like
 import numpy as np
 
 # from config import NOobject_COEFF, \
@@ -12,23 +12,32 @@ import numpy as np
 
 epsilon = 0.001
 np.argmax(3, 3)
+ignore_thresh = 0.5
 
 
-def loss(predictions, targets, targets_length, image_size: int, average=True):
+def loss(predictions, targets, image_size: int, average=True):
     # generate the no-objectectness mask. mask_noobject has size of [B, N_PRED]
-    mask_noobject = noobject_mask_fn(predictions, targets)
-    target_t_1d, index_predicted_object = build_targets(targets, targets_length, image_size)
+    predictions_1, predictions_2, predictions_3 = predictions
+    """
+    we have predited_boxes and ground trues boxes
+    predicted box -> target box that overlaps with predicted box with iou > ignore thresh
+    
+    at training time we only want one bounding box predictor to be responsible for each object.
+    
+    
+    """
+    mask_noobject = noobject_mask_fn(predictions, targets) # batch size x predictions size x targets size
+
+    target_t_1d, index_predicted_object = build_targets(targets, image_size)
     mask_noobject = noobject_mask_filter(mask_noobject, index_predicted_object)
 
     # calculate the no-objectectness loss
     predicted_confidence_logit = predictions[..., 4]
-    target_zero = torch.zeros(predicted_confidence_logit.size(), device=predicted_confidence_logit.device)
-    # target_noobject = target_zero + (1 - mask_noobject) * 0.5
+    target_zero = zeros(predicted_confidence_logit.size())
     predicted_confidence_logit = predicted_confidence_logit - (1 - mask_noobject) * 1e7
     noobject_loss = F.binary_cross_entropy_with_logits(predicted_confidence_logit, target_zero, reduction='sum')
 
     # select the predictions corresponding to the targets
-    n_batch, n_pred, _ = predictions.size()
     preds_1d = predictions.view(n_batch * n_pred, -1)
     preds_object = preds_1d.index_select(0, index_predicted_object)
 
@@ -44,7 +53,9 @@ def loss(predictions, targets, targets_length, image_size: int, average=True):
     # calculate the classification loss
     classification_loss = F.binary_cross_entropy_with_logits(preds_object[..., 5:], target_t_1d[..., 5:],
                                                              reduction='sum')
-
+    """loss function only penalizes classification error if and object is present in that grid cell.
+    It also only penalizes bounding box coordinate error if that predictor is responsiable for the ground 
+    trues box(i.e. has the highest iou of any predictor in that grid cell"""
     # total loss
     # total_loss = noobject_loss * NOobject_COEFF + object_loss + classification_loss + coord_loss * COORD_COEFF
 
@@ -55,16 +66,11 @@ def loss(predictions, targets, targets_length, image_size: int, average=True):
 
 
 def noobject_mask_fn(predictions, target):
-    num_batch, num_pred, num_attrib = predictions.size()
-    ious = iou_batch(predictions[..., :4], target[..., :4])  # in cxcywh format
-    # for each pred bbox, find the target box which overlaps with it (without zero centered) most, and the iou value.
-    max_ious, max_ious_index = max(ious, dim=2)
-    noobject_indicator = torch.where((max_ious - IGNORE_THRESH) > 0, torch.zeros_like(max_ious),
-                                     torch.ones_like(max_ious))
-    return noobject_indicator
+    max_ious, max_ious_index = max(count_iou(predictions[..., :4], target[..., :4]), dim=-1)
+    return ((max_ious - ignore_thresh) > 0).float()
 
 
-def noobject_mask_filter(mask_noobject: Tensor, index_object_1d: Tensor):
+def noobject_mask_filter(mask_noobject, index_object_1d):
     n_batch, n_pred = mask_noobject.size()
     mask_noobject = mask_noobject.view(-1)
     filter_ = torch.zeros(mask_noobject.size(), device=mask_noobject.device)
