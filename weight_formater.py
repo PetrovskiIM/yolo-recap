@@ -11,7 +11,7 @@ image = cv2.imread("/home/ivan/Projects/yolo-recap/ee.jpg")
 image = cv2.resize(image, (416, 416), interpolation=cv2.INTER_LINEAR)
 image = torch.Tensor(image).permute(2, 0, 1)
 
-weight_file_path = "/home/ivan/Projects/yolodbmanager/weights/smallcars/production/yolo.weights"
+weight_file_path = "/home/ivan/sets/production/small/v3single_last.weights"
 with open(weight_file_path, "rb") as f:
     header = np.fromfile(f, dtype=np.int32, count=5)
     header_info = header
