@@ -2,7 +2,6 @@ import pandas as pd
 
 current_classes_dictionary = {"nroi": 99, "roi": 100, "pricep": 7}
 
-
 def area(box_dictionary):
     return (box_dictionary["xmax"] - box_dictionary["xmin"]) * (box_dictionary["ymax"] - box_dictionary["ymin"])
 
@@ -23,27 +22,43 @@ def convert_to_yolo(scaled_voc_boxes, one_class=True):
     return ab_txt_lines
 
 
-def normalize_boxes(voc_boxes, shape):
+def normalize_boxes(boxes, shape):
     image_height, image_width, _ = shape
-    if len(voc_boxes) > 0:
-        boxes = pd.DataFrame(voc_boxes, columns=["class_index", "xmin", "ymin", "xmax", "ymax"]).astype(float)
-        boxes[["xmin", "xmax"]] = boxes[["xmin", "xmax"]] / image_width
-        boxes[["ymin", "ymax"]] = boxes[["ymin", "ymax"]] / image_height
-        return boxes[["class_index", "xmin", "ymin", "xmax", "ymax"]].values
+    if len(boxes) > 0:
+        boxes = pd.DataFrame(boxes, columns=["class_index", "1st_x_related", "1st_y_related", "2nd_x_related",
+                                             "2nd_y_related"]).astype(float)
+        boxes[["1st_x_related", "2nd_x_related"]] = boxes[["1st_x_related", "2nd_x_related"]] / image_width
+        boxes[["1st_y_related", "2nd_y_related"]] = boxes[["1st_y_related", "2nd_y_related"]] / image_height
+        return boxes[["class_index", "1st_x_related", "1st_y_related", "2nd_x_related", "2nd_y_related"]].values
     else:
         return []
 
 
-def denormalize_boxes(ab_scaled_boxes, shape):
-    image_height, image_width, _ = shape
-    if len(ab_scaled_boxes) > 0:
-        scaled_boxes = pd.DataFrame(ab_scaled_boxes,
-                                    columns=["class_index", "center_x", "center_y", "width", "height"]).astype(float)
-        scaled_boxes["xmin"] = (scaled_boxes["center_x"] - scaled_boxes["width"] / 2) * image_width
-        scaled_boxes["xmax"] = (scaled_boxes["center_x"] + scaled_boxes["width"] / 2) * image_width
-        scaled_boxes["ymin"] = (scaled_boxes["center_y"] - scaled_boxes["height"] / 2) * image_height
-        scaled_boxes["ymax"] = (scaled_boxes["center_y"] + scaled_boxes["height"] / 2) * image_height
-        return scaled_boxes[["class_index", "xmin", "ymin", "xmax", "ymax"]].values
+def denormalize_boxes(scaled_boxes, shape):
+    height, width, _ = shape
+    if len(scaled_boxes) > 0:
+        scaled_boxes = \
+            pd.DataFrame(scaled_boxes, columns=["class_index",
+                                                "1st_x_related",
+                                                "1st_y_related",
+                                                "2nd_x_related",
+                                                "2nd_y_related"]).astype(float)
+        scaled_boxes[["1st_x_related", "2nd_x_related"]] = scaled_boxes[["1st_x_related", "2nd_x_related"]] * width
+        scaled_boxes[["1st_y_related", "2nd_y_related"]] = scaled_boxes[["1st_y_related", "2nd_y_related"]] * height
+
+        return scaled_boxes[["class_index", "1st_x_related", "1st_y_related", "2nd_x_related", "2nd_y_related"]].values
+    else:
+        return []
+
+
+def convert_to_voc(yolo_boxes):
+    if len(yolo_boxes) > 0:
+        boxes = pd.DataFrame(yolo_boxes, columns=["class_index", "center_x", "center_y", "width", "height"]).astype(float)
+        boxes["xmin"] = (boxes["center_x"] - boxes["width"] / 2)
+        boxes["xmax"] = (boxes["center_x"] + boxes["width"] / 2)
+        boxes["ymin"] = (boxes["center_y"] - boxes["height"] / 2)
+        boxes["ymax"] = (boxes["center_y"] + boxes["height"] / 2)
+        return boxes[["class_index", "xmin", "ymin", "xmax", "ymax"]].values
     else:
         return []
 
@@ -94,9 +109,9 @@ def filter_classes(boxes, unwelcome_classes, classes_dictionary=current_classes_
     return boxes
 
 
-def convert_to_voc(yolo_boxes):
-    vox_boxes = []
-    for class_index, center_x, center_y, width, height in yolo_boxes:
-        xmin, ymin, xmax, ymax = center_x - width / 2, center_y - height / 2, center_x + width / 2, center_y + height / 2
-        vox_boxes.append([class_index, xmin, ymin, xmax, ymax])
-    return vox_boxes
+# def convert_to_voc(yolo_boxes):
+#     vox_boxes = []
+#     for class_index, center_x, center_y, width, height in yolo_boxes:
+#         xmin, ymin, xmax, ymax = center_x - width / 2, center_y - height / 2, center_x + width / 2, center_y + height / 2
+#         vox_boxes.append([class_index, xmin, ymin, xmax, ymax])
+#     return vox_boxes
