@@ -110,3 +110,4 @@ for _, x, y, _, _ in transfromed_boxes:
     ax.plot([x*scale], [y*scale], 'r+', color="r")
 plt.show()
 
+

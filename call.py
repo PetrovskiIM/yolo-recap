@@ -83,8 +83,8 @@ ax = fig.add_subplot(1, 1, 1)
 ax.plot(np.array([0, math.cos(angle), math.cos(angle) + math.sin(angle), math.sin(angle), 0]),
         np.array([math.sin(angle), 0, math.cos(angle), math.cos(angle) + math.sin(angle), math.sin(angle)]), color="g", linewidth=2)
 
-xs = np.array([0,1,1,0,0])
-ys = np.array([0,0,1,1,0])
+xs = np.array([0, 1, 1, 0, 0])
+ys = np.array([0, 0, 1, 1, 0])
 
 # box = np.array([xs,ys])
 # ax.plot(xs,ys, color="b")
@@ -109,4 +109,5 @@ ax.plot([0, scale, scale, 0,      0],
 for _, x, y, _, _ in transfromed_boxes:
     ax.plot([x*scale], [y*scale], 'r+', color="r")
 plt.show()
+# endregion
 
