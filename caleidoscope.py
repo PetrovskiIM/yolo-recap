@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torchvision.transforms.functional as functional
 import math
+import numpy as np
 
 names = ["class_index", "center_x", "center_y", "width", "height"]
 
@@ -69,14 +70,14 @@ def coordinates_reverse_transform(boxes, angle, image, transformed_image):
 
 image_path = "/home/ivan/Desktop/angle/1003"
 image = cv2.imread(f"{image_path}.jpg")
-scaled_boxes = pd.read_csv(f"{image_path}.txt", header=None, sep=' ').values
+
 
 transformed_image_path = "/home/ivan/Desktop/angle/1003augmented"
-transformed_image = rotate_mirroring_corners(image, 30)
+transformed_image = rotate_mirroring_corners(image, 45)
 cv2.imwrite(f"{transformed_image_path}.jpg", transformed_image, )
-
-angle_in_radians = math.pi / 6
-transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
+scaled_boxes = pd.read_csv(f"{image_path}.txt", header=None, sep=' ').values
+angle_in_radians = math.pi / 4
+#transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
 scaled_transfromed_boxes = pd.read_csv(f"{image_path}augmented.txt", header=None, sep=' ').values
 absolute_boxes = coordinate_transform(denormalize_boxes(scaled_boxes, image.shape), angle_in_radians, image)
 absolute_transformed_boxes = denormalize_boxes(scaled_transfromed_boxes, transformed_image.shape)
@@ -86,14 +87,18 @@ absolute_transformed_boxes = denormalize_boxes(scaled_transfromed_boxes, transfo
 fig = plt.figure(dpi=380)
 ax = fig.add_subplot(1, 1, 1)
 for _, x, y, w, h in absolute_boxes:
-    ax.plot([x], [y], "D", color="r")
+    beta = math.pi/4
+    martrix = np.array([[math.cos(beta), -math.sin(beta)],[math.sin(beta), math.cos(beta)]])
+    coordinates = np.dot(np.array([[0, 0], [w, 0], [w, h], [0, h], [0, 0]]) - [w / 2, h / 2],martrix) + [x, y]
+    ax.plot(coordinates[:, 0], coordinates[:, 1], color="r")
 
 for _, x, y, w, h in absolute_transformed_boxes:
-    ax.plot([x], [y], "s", color="b")
+    coordinates = np.array([[0, 0], [w, 0], [w, h], [0, h], [0, 0]]) - [w / 2, h / 2] + [x, y]
+    ax.plot(coordinates[:, 0], coordinates[:, 1], color="b")
 plt.imshow(transformed_image)
 plt.show()
 
-angle_in_radians = -math.pi / 6
+angle_in_radians = -math.pi / 4
 scaled_transfromed_boxes = pd.read_csv(f"{image_path}augmented.txt", header=None, sep=' ').values
 absolute_transformed_boxes = coordinates_reverse_transform(
     denormalize_boxes(scaled_transfromed_boxes, transformed_image.shape),
@@ -125,14 +130,14 @@ for box in boxes.to_dict("records"):
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]),
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]))
         ) < 5:
-            box["45width"] = image.shape[1] / transformed_image.shape[1] * alpha_box["width"]
-            box["45height"] = image.shape[0] / transformed_image.shape[0] * alpha_box["height"]
+            box["45width"] = alpha_box["width"]  #  image.shape[1] / transformed_image.shape[1] * alpha_box["width"]
+            box["45height"] = alpha_box["height"] #  image.shape[0] / transformed_image.shape[0] * alpha_box["height"]
             paired_boxes.append(box)
             taked_in_accout = True
     if not taked_in_accout:
         paired_boxes.append(box)
 
-pd.DataFrame.from_records(paired_boxes, index=None).to_csv("boxes.csv")
+# pd.DataFrame.from_records(paired_boxes, index=None).to_csv("boxes.csv")
 # boxes.loc[boxes["width"] > boxes["height"]]
 # for box in boxes.to_dict("records"):
 #     if len(box["correspondence"]):

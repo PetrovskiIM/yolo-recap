@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import cv2
-
+import torchvision
 import torch
 from torch import Tensor, cat, sigmoid, exp, stack, max
 from model import Darknet, Tail, Head
@@ -104,3 +104,4 @@ def parse_tail_weight(flatten_weights, model):
 
 darknet_state_dict, unused_weights = parse_darknet_weight(weights, darknet)
 tail_state_dict, unused_weights = parse_tail_weight(unused_weights, tail)
+

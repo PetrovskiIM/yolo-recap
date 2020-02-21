@@ -10,7 +10,18 @@ import requests
 import json
 import base64
 from scipy.ndimage.interpolation import rotate
-
+# denominator = w0 ** 2 - sqrt(2) * w0 * w1 + w1 ** 2
+#     cosa = sqrt(2 + (sqrt(w0 ** 2 * (2 * denominator - h0 ** 2)) - (h0 * w0) + sqrt(2) * h0 * w1) / denominator) / 2
+#     sina = sqrt(1 - cosa ** 2)
+#     w = (cosa + sina) * w0 - sqrt(2) * sina * w1
+#     h = (sina - cosa) * w0 + sqrt(2) * cosa * w1
+#
+#     denominator = h0 ** 2 - sqrt(2) * h0 * h1 + h1 ** 2
+#     cosa = sqrt(2 + (sqrt(h0 ** 2 * (2 * denominator - w0 ** 2)) - (h0 * w0) + sqrt(2) * h1 * w0) / denominator) / 2
+#     sina = sqrt(1 - cosa ** 2)
+#     w = (sina - cosa) * h0 + sqrt(2) * h1
+#     h = (cosa + sina) * h0 - sqrt(2) * h1
+#     return w, h
 
 def convert_cv2_to_pil(cv2_image):
     from PIL import Image
