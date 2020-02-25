@@ -5,51 +5,76 @@ import numpy as np
 
 def solve(w0, h0, w1, h1, axis=0):
     w, h, cosa, sina = 0, 0, 1, 0
-    if ((w0 / h0) < 1.1) & ((w0 / h0) > 0.9):
-        st = "square ->"
-        if ((w1 / h1) < 1.1) & ((w1 / h1) > 0.9):
-            st += "square"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
-        elif w1 / h1 > 1.2:
-            st += "horizontal rectangle"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-           # w, h = h, w
-            sina *= -1
-
-        else:
-            st += "vertical rectangle"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-            w, h = h,w
-            sina *=-1
-
-    elif w0 / h0 > 1.2:
-        st = "horizontal rectangle -> "
-        if ((w1 / h1) < 1.1) & ((w1 / h1) > 0.9):
-            st += "square"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-        elif w1 / h1 > 1.2:
-            st += "horizontal rectangle"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-        else:
-            st += "vertical rectangle"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-    else:
-        st = "vertical rectangle -> "
-        if ((w1 / h1) < 1.1) & ((w1 / h1) > 0.9):
-            st += "square"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
-            sina *= -1
-        elif w1 / h1 > 1.2:
-            st += "horizontal rectangle"
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
-            sina *= -1
-        else:
-            st += "vertical rectangle"
-            # w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
-            # sina *= -1
-            w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
-            w, h = h, w
-            sina *= -1
+    st=""
+    if ((w0/h0) > (w1/h1)) & (w0/h0>1):
+        # w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+        st +="done"
+    elif ((w0/h0) > (w1/h1)) & (w0/h0<1):
+        st+= "done"
+        #w, h, sina, cosa = solute(h0, w0, w1, h1, 0)
+    elif ((w0/h0) < (w1/h1)):
+    # if ((w0 / h0) < 1.3) & ((w0 / h0) > 0.8):
+    #     st = "square ->"
+    #     if ((w1 / h1) < 1.3) & ((w1 / h1) > 0.8):
+    #         st += "square"
+    #         # no cases for now
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #         #print("square")
+    #     elif w1 / h1 > 1.3:
+    #         st += "horizontal rectangle"
+    #         # no cases for now
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #         w, h = h, w
+    #         sina *= -1
+    #     else:
+    #         st += "vertical rectangle"
+    #         # sometimes bad
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #
+    # elif w0 / h0 >= 1.3:
+    #     st = "horizontal rectangle -> "
+    #     if ((w1 / h1) < 1.1) & ((w1 / h1) > 0.9):
+    #         st += "square"
+    #         # done for now - bad some times
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1,0)
+    #     elif w1 / h1 >= w0/h0:
+    #         st += "more horizontal rectangle"
+    #         # no casses yet to test on
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #         sina *= -1
+    #     elif (w1/h1 < w0/h0) & (w0/h0>1.1):
+    #         st += "less horizontal rectangle"
+    #         # done for now
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #     else:
+    #         st += "vertical rectangle"
+    #         # no cases yet
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
+    #         sina*=-1
+    # elif w0/h0 <= 0.8:
+    #     st = "vertical rectangle -> "
+    #     if ((w1 / h1) < 1.1) & ((w1 / h1) > 0.90):
+    #         st += "square"
+    #         # angle seems need to leveraged
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
+    #         sina *=-1
+    #     elif w1 / h1 >= 1.1:
+    #         st += "horizontal rectangle"
+    #         # no cases for now
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
+    #         sina *= -1
+    #     elif (w1/h1) < (w0/h0):
+    #         #done for now
+    #         st += "more vertical rectangle"
+    #         w, h, cosa, sina = solute(h0, w0, w1, h1, 0)
+    #         sina-= cmath.sin(cmath.pi)
+    #         sina *= -1
+    #
+    #     else:
+    #         st += "less vertical rectangle"
+    #         #seems ok
+    #         w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
+    #         sina *= -1
     return w, h, np.array([[cosa, -sina], [sina, cosa]])
 
 
@@ -104,7 +129,7 @@ for i in range(len(boxes)):
         hs.append(0)
         rotation_matrixis.append(np.array([[1,0],[0,1]]))
     else:
-        w,h, rotation_matrix =  solve(w0,h0, w1,h1,0)
+        w,h, rotation_matrix = solve(w0,h0, w1,h1,0)
         ws.append(w)
         hs.append(h)
         rotation_matrixis.append(rotation_matrix)
@@ -117,12 +142,20 @@ image = cv2.imread(f"{image_path}.jpg")
 fig = plt.figure(dpi=380)
 ax = fig.add_subplot(1, 1, 1)
 for i in range(len(boxes)):
-    center_x, center_y, w,h,matrix = boxes.iloc[i][["center_x", "center_y", "w", "h", "rotation_matrix"]].values
+    center_x, center_y, w, h, matrix = boxes.iloc[i][["center_x", "center_y", "w", "h", "rotation_matrix"]].values
     coordinates = np.dot((np.array([[0,0],
                                     [w,0],
                                     [w,h],
                                     [0,h],
                                     [0,0]])-[w/2, h/2]), matrix) + [center_x, center_y]
+    w0, h0, w1, h1 = boxes.iloc[i][["width", "height", "45width", "45height"]].values
     ax.plot(coordinates[:,0], coordinates[:,1])
+    try:
+        if h0.real!=0:
+            plt.text(coordinates[0,0], coordinates[0,1], str(round(w0.real/h0.real,3)), fontsize=3, color="r")
+
+            plt.text(coordinates[0,0], coordinates[0,1]+8, str(round(w1.real/h1.real,3)), fontsize=3, color="b")
+    except:
+     1+1
 plt.imshow(image)
 plt.show()
