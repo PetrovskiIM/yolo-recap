@@ -44,18 +44,6 @@ def solute(alpha_rotated_container_width,
     else:
         return h, w, cosa, sina
 
-
-# #
-# w0 = 107.27557442
-# h0 = 95.501152
-# w1 = 83.654196
-# h1 = 114.322310
-#
-# # horizontal ->w1 solve
-# # vertical -> h1 solve
-# # square - >all
-# print(solve(w0, h0, w1, h1))
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt

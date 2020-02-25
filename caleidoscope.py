@@ -75,9 +75,10 @@ image = cv2.imread(f"{image_path}.jpg")
 transformed_image_path = "/home/ivan/Desktop/angle/1003augmented"
 transformed_image = rotate_mirroring_corners(image, 45)
 cv2.imwrite(f"{transformed_image_path}.jpg", transformed_image, )
-scaled_boxes = pd.read_csv(f"{image_path}.txt", header=None, sep=' ').values
 angle_in_radians = math.pi / 4
-#transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
+# transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
+
+scaled_boxes = pd.read_csv(f"{image_path}.txt", header=None, sep=' ').values
 scaled_transfromed_boxes = pd.read_csv(f"{image_path}augmented.txt", header=None, sep=' ').values
 absolute_boxes = coordinate_transform(denormalize_boxes(scaled_boxes, image.shape), angle_in_radians, image)
 absolute_transformed_boxes = denormalize_boxes(scaled_transfromed_boxes, transformed_image.shape)
@@ -129,7 +130,7 @@ for box in boxes.to_dict("records"):
         if np.sqrt(np.dot(
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]),
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]))
-        ) < 5:
+        ) < 10:
             box["45width"] = alpha_box["width"]  #  image.shape[1] / transformed_image.shape[1] * alpha_box["width"]
             box["45height"] = alpha_box["height"] #  image.shape[0] / transformed_image.shape[0] * alpha_box["height"]
             paired_boxes.append(box)
@@ -137,7 +138,7 @@ for box in boxes.to_dict("records"):
     if not taked_in_accout:
         paired_boxes.append(box)
 
-# pd.DataFrame.from_records(paired_boxes, index=None).to_csv("boxes.csv")
+pd.DataFrame.from_records(paired_boxes, index=None).to_csv("boxes.csv")
 # boxes.loc[boxes["width"] > boxes["height"]]
 # for box in boxes.to_dict("records"):
 #     if len(box["correspondence"]):
