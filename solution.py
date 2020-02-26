@@ -10,15 +10,14 @@ def solve(w0, h0, w1, h1):
         w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
         st += "done"
     elif ((w0 / h0) < (w1 / h1)) & (w0 / h0 > 1):
-        w, h, cosa, sina = solute(w0, h0, w1, h1, 0)
         st += "no cases"
+        w, h,  sina, cosa = solute(h0, w0, w1, h1, 1)
     elif ((w0 / h0) > (w1 / h1)) & (w0 / h0 < 1):
         st += "the one part seems to work extreamly well"
         w, h, sina, cosa = solute(h0, w0, w1, h1, 0)
     elif ((w0 / h0) < (w1 / h1)) & (w0 / h0 < 1):
-        w, h, sina, cosa = solute(h0, w0, w1, h1, 0)
-        if w1 / h1 > 1:
-            sina *= -1
+        st+="need more ifs"
+        w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
     return w.real, h.real, np.array([[cosa.real, -sina.real],
                                      [sina.real, cosa.real]])
 
@@ -47,7 +46,6 @@ def solute(alpha_rotated_container_width,
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import math
 from solution import solve
 
 boxes = pd.read_csv("boxes.csv")[["center_x", "center_y", "width", "height", "45width", "45height"]]
@@ -76,6 +74,7 @@ image_path = "/home/ivan/Desktop/angle/1003"
 image = cv2.imread(f"{image_path}.jpg")
 fig = plt.figure(dpi=380)
 ax = fig.add_subplot(1, 1, 1)
+plt.axis('off')
 for i in range(len(boxes)):
     center_x, center_y, w, h, matrix = boxes.iloc[i][["center_x", "center_y", "w", "h", "rotation_matrix"]].values
     coordinates = np.dot((np.array([[0, 0],
