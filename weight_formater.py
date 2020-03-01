@@ -1,26 +1,16 @@
 import numpy as np
-import pandas as pd
-import matplotlib
-import cv2
-
 import torch
-from torch import Tensor, cat, sigmoid, exp, stack, max
-from model import Darknet, Tail, Head
+from model import Darknet, Tail
 
-image = cv2.imread("/home/ivan/Projects/yolo-recap/ee.jpg")
-image = cv2.resize(image, (416, 416), interpolation=cv2.INTER_LINEAR)
-image = torch.Tensor(image).permute(2, 0, 1)
-
-weight_file_path = "/home/ivan/sets/production/small/v3single_last.weights"
+weight_file_path = "/home/ivan/Downloads/yolov3.weights"
 with open(weight_file_path, "rb") as f:
     header = np.fromfile(f, dtype=np.int32, count=5)
     header_info = header
     seen = header[3]
     weights = np.fromfile(f, dtype=np.float32)
-print(seen)
 
 darknet = Darknet()
-tail = Tail(1, [3, 3, 3])
+tail = Tail(80, [3, 3, 3])
 
 
 def parse_darknet_weight(flatten_weights, model):
@@ -92,7 +82,7 @@ def parse_tail_weight(flatten_weights, model):
                                 elif (unordered_keys[0] in checkpoint.keys()) & \
                                         (unordered_keys[1] in checkpoint.keys()):
                                     for unordered_key in unordered_keys[:2]:
-                                        print(unordered_key)
+                                        #print(unordered_key)
                                         size_expected_by_model = checkpoint[unordered_key].size()
                                         length_expected_by_model = np.prod(size_expected_by_model)
                                         new_dict[unordered_key] = \
@@ -104,3 +94,7 @@ def parse_tail_weight(flatten_weights, model):
 
 darknet_state_dict, unused_weights = parse_darknet_weight(weights, darknet)
 tail_state_dict, unused_weights = parse_tail_weight(unused_weights, tail)
+darknet.load_state_dict(darknet_state_dict)
+tail.load_state_dict(tail_state_dict)
+darknet.eval()
+tail.eval()

@@ -38,7 +38,7 @@ class Darknet(Module):
     def __init__(self):
         super(Darknet, self).__init__()
         self.intro = Sequential(Conv2d(3, 2 ** 0 * filters_multiplier, **casual),
-                                BatchNorm2d(filters_multiplier),
+                                BatchNorm2d(2 ** 0 * filters_multiplier),
                                 LeakyReLU(negative_slope))
         self.module_list = ModuleList([
             ModuleList(
@@ -50,8 +50,8 @@ class Darknet(Module):
                             LeakyReLU(negative_slope),
                             Conv2d(2 ** i * filters_multiplier, 2 ** (i + 1) * filters_multiplier, **casual),
                             BatchNorm2d(2 ** (i + 1) * filters_multiplier),
-                            LeakyReLU(negative_slope))
-                 ] * num_of_repetitions) for i, num_of_repetitions in enumerate([1, 2, 8, 8, 4])
+                            LeakyReLU(negative_slope)) for _ in range(num_of_repetitions)]
+            ) for i, num_of_repetitions in enumerate([1, 2, 8, 8, 4])
         ])
 
     def forward(self, tensor_image):
@@ -71,18 +71,20 @@ class Tail(Module):
         self.num_of_yolo_layers = 3
         route_streams = [0, 2 ** 3, 2 ** 2]
         self.harmonics = ModuleList([Sequential(
-            Conv2d((2 ** (5 - i) + route_streams[i]) * filters_multiplier, 2 ** (4 - i) * filters_multiplier,
-                   **bottleneck),
+            Conv2d((2 ** (5 - i) + route_streams[i]) * filters_multiplier,
+                   2 ** (4 - i) * filters_multiplier, **bottleneck),
             BatchNorm2d(2 ** (4 - i) * filters_multiplier),
             LeakyReLU(negative_slope),
-            Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+            Conv2d(2 ** (4 - i) * filters_multiplier,
+                   2 ** (5 - i) * filters_multiplier, **casual),
             BatchNorm2d(2 ** (5 - i) * filters_multiplier),
             LeakyReLU(negative_slope),
             Conv2d(2 ** (5 - i) * filters_multiplier,
                    2 ** (4 - i) * filters_multiplier, **bottleneck),
             BatchNorm2d(2 ** (4 - i) * filters_multiplier),
             LeakyReLU(negative_slope),
-            Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+            Conv2d(2 ** (4 - i) * filters_multiplier,
+                   2 ** (5 - i) * filters_multiplier, **casual),
             BatchNorm2d(2 ** (5 - i) * filters_multiplier),
             LeakyReLU(negative_slope)) for i in range(self.num_of_yolo_layers)])
         self.splitted_harmonic = ModuleList([
