@@ -130,7 +130,7 @@ class Head(Module):
     def forward(self, features):
         grid_size = list(features.size()[-2:])
         cells_offsets = stack(meshgrid(linspace(0, 1 - 1 / grid_size[0], grid_size[0]),
-                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1]).t()), -1)
+                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)
         features = features.view([-1, len(self.anchors), self.number_of_classes + 5] + grid_size) \
             .permute(0, 1, 3, 4, 2) \
             .contiguous()
@@ -150,3 +150,4 @@ class Yolo(Module):
     def forward(self, image):
         features = self.feature_extractor(image)
         return self.head(self.tail(features)[0])
+
