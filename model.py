@@ -116,7 +116,7 @@ class Tail(Module):
             tensor = self.splitted_harmonic[i][1](route_host)
             out.append(self.preludes[i](tensor))
             if i < 2:
-                tensor = interpolate(self.equalizers_for_routes[i](route_host), scale_factor=2)
+                tensor = interpolate(self.equalizers_for_routes[i](route_host), scale_factor=2, mode="nearest")
                 tensor = cat((tensor, routes_hosts[-2 - i]), 1)
         return out
 
@@ -130,10 +130,10 @@ class Head(Module):
     def forward(self, features):
         grid_size = list(features.size()[-2:])
         cells_offsets = stack(meshgrid(linspace(0, 1 - 1 / grid_size[0], grid_size[0]),
-                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)
+                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)[...,[1,0]]
         features = features.view([-1, len(self.anchors), self.number_of_classes + 5] + grid_size) \
             .permute(0, 1, 3, 4, 2) \
-            .contiguous()
+           # .contiguous()
         centers = sigmoid(features[..., :2]) / Tensor(grid_size) + cells_offsets
         sizes = exp(features[..., 2:4]) * self.anchors
         probabilities = sigmoid(features[..., 4:])

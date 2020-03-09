@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from model import Darknet, Tail
 
-weight_file_path = "/home/ivan/Downloads/yolo.weights"
+weight_file_path = "/home/ivan/sets/best_big/backup/v3single_last.weights"
 with open(weight_file_path, "rb") as f:
     header = np.fromfile(f, dtype=np.int32, count=5)
     header_info = header
@@ -104,7 +104,7 @@ def reorder_keys(word, repetition_number=None, local_i=0, type_number=None):
 
     if type_number is not None:
         version_ended_by_dot += str(type_number) + "."
-    return {
+    d= {
         "convolution_biases": f"{word}.{version_ended_by_dot}{local_i}.bias",
         "convolution_weights": f"{word}.{version_ended_by_dot}{local_i}.weight",
         "weights": f"{word}.{version_ended_by_dot}{local_i + 1}.weight",
@@ -112,6 +112,25 @@ def reorder_keys(word, repetition_number=None, local_i=0, type_number=None):
         "running_mean": f"{word}.{version_ended_by_dot}{local_i + 1}.running_mean",
         "running_var": f"{word}.{version_ended_by_dot}{local_i + 1}.running_var"
     }
+    # print(d["weights"])
+    # print(d["biases"])
+    # print(d["running_mean"])
+    # print(d["running_var"])
+    # print(d["convolution_weights"])
+    return d
+
+
+def format_darknet():
+    reorder_keys("intro")
+    for repetition_number, num_of_types in enumerate([1, 2, 8, 8, 4]):
+        for type_number in range(num_of_types + 1):
+            if type_number == 0:
+                reorder_keys("module_list", repetition_number, local_i=0, type_number=type_number)
+            else:
+                local_i = 0
+                reorder_keys("module_list", repetition_number, local_i, type_number)
+                local_i += 3
+                reorder_keys("module_list", repetition_number, local_i, type_number)
 
 
 def format_tail(number_of_yolo_layers):
@@ -132,19 +151,6 @@ def format_tail(number_of_yolo_layers):
         reorder_keys("equalizers_for_routes", repetition_number)
 
 
-def format_darknet():
-    reorder_keys("intro")
-    for repetition_number, num_of_types in enumerate([1, 2, 8, 8, 4]):
-        for type_number in range(num_of_types + 1):
-            if type_number == 0:
-                reorder_keys("module_list", repetition_number, local_i=0, type_number=type_number)
-            else:
-                local_i = 0
-                reorder_keys("module_list", repetition_number, local_i, type_number)
-                local_i += 3
-                reorder_keys("module_list", repetition_number, local_i, type_number)
-
-
 def allocate_weight(key, checkpoint, flatten_weights):
     size_expected_by_model = checkpoint[key].size()
     length_expected_by_model = np.prod(size_expected_by_model)
@@ -154,8 +160,8 @@ def allocate_weight(key, checkpoint, flatten_weights):
 
 def allocate_weight_layer(darknet_to_pytorch, checkpoint, flatten_weight, with_normalization=True):
     if with_normalization:
-        flatten_weight = allocate_weight(darknet_to_pytorch["weights"], checkpoint, flatten_weight)
         flatten_weight = allocate_weight(darknet_to_pytorch["biases"], checkpoint, flatten_weight)
+        flatten_weight = allocate_weight(darknet_to_pytorch["weights"], checkpoint, flatten_weight)
         flatten_weight = allocate_weight(darknet_to_pytorch["running_mean"], checkpoint, flatten_weight)
         flatten_weight = allocate_weight(darknet_to_pytorch["running_var"], checkpoint, flatten_weight)
         flatten_weight = allocate_weight(darknet_to_pytorch["convolution_weights"], checkpoint, flatten_weight)
@@ -166,7 +172,7 @@ def allocate_weight_layer(darknet_to_pytorch, checkpoint, flatten_weight, with_n
 
 
 def load_checkpoint(darknet, tail, flatten_weight):
-    checkpoint = darknet.state_dict()
+    checkpoint = darknet.state_dict().copy()
     number_of_yolo_layers = 3
     flatten_weight = allocate_weight_layer(reorder_keys("intro"), checkpoint, flatten_weight)
     for repetition_number, num_of_types in enumerate([1, 2, 8, 8, 4]):
@@ -195,9 +201,10 @@ def load_checkpoint(darknet, tail, flatten_weight):
                                                        type_number),
                                           checkpoint,
                                           flatten_weight)
-    darknet.load_state_dict(checkpoint)
-    checkpoint = tail.state_dict()
+    print(darknet.load_state_dict(checkpoint))
+    checkpoint = tail.state_dict().copy()
     for repetition_number in range(number_of_yolo_layers):
+        #print(repetition_number)
         local_i = 0
         flatten_weight = \
             allocate_weight_layer(reorder_keys("harmonics", repetition_number, local_i),
@@ -227,26 +234,40 @@ def load_checkpoint(darknet, tail, flatten_weight):
             allocate_weight_layer(reorder_keys("splitted_harmonic", repetition_number, type_number=1),
                                   checkpoint,
                                   flatten_weight)
+        print(len(flatten_weight))
         flatten_weight = \
-            allocate_weight_layer(  {
+            allocate_weight_layer({
             "convolution_biases": f"preludes.{repetition_number}.bias",
-            "convolution_weights": f"preludes.{repetition_number}.weight"},
+            "convolution_weights": f"preludes.{repetition_number}.weight"
+            },
                                   checkpoint,
                                   flatten_weight, with_normalization=False)
           # flatten_weight = \
         #     allocate_weight_layer(reorder_keys("preludes", repetition_number),
         #                           checkpoint,
         #                           flatten_weight, with_normalization=False)
-        flatten_weight = \
-            allocate_weight_layer(reorder_keys("equalizers_for_routes", repetition_number),
-                                  checkpoint,
-                                  flatten_weight)
-        tail.load_state_dict(checkpoint)
-        return darknet, tail, flatten_weight
+        if repetition_number<2:
+            flatten_weight = \
+                allocate_weight_layer(reorder_keys("equalizers_for_routes", repetition_number),
+                                      checkpoint,
+                                      flatten_weight)
+    tail.load_state_dict(checkpoint)
+    return darknet, tail, flatten_weight
 
-print(darknet.state_dict().keys())
-print(tail.state_dict().keys())
 
+
+# class WeightsLoader:
+#     def __init__(self, darknet_state, tail_state):
+#         self.darknet_state = darknet_state.copy()
+#         self.tail_state = tail_state.copy()
+#     def load_weights(self, weight_path):
+#
+#
+# # for key in darknet.state_dict():
+# #     print(key)
+# #
+# # for key in tail.state_dict():
+# #     print(key)
+#
+# #print("======================================================")
 darknet, tail, weight = load_checkpoint(darknet, tail, weights)
-darknet.eval()
-tail.eval()
