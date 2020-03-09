@@ -1,6 +1,6 @@
 from torch import Tensor, cat, sigmoid, exp, meshgrid, linspace, stack
 from torch.nn.functional import interpolate
-from torch.nn import Module, ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
+from torch.nn import Module, ModuleList, ModuleDict, Sequential, Conv2d, BatchNorm2d, LeakyReLU
 
 filters_multiplier = 32
 negative_slope = 0.1
@@ -63,6 +63,61 @@ class Darknet(Module):
                 tensor += self.module_list[i][j + 1](tensor)
             outs.append(tensor)
         return outs[-3:]
+
+
+class Tails(Module):
+    def __init__(self, number_of_classes, anchors_dims):
+        super(Tails, self).__init__()
+        self.num_of_yolo_layers = 3
+        route_streams = [0, 2 ** 3, 2 ** 2]
+        self.tails = ModuleList([
+            ModuleList(
+                [Sequential(
+                    Conv2d((2 ** (5 - i) + route_streams[i]) * filters_multiplier,
+                           2 ** (4 - i) * filters_multiplier, **bottleneck),
+                    BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope),
+                    Conv2d(2 ** (4 - i) * filters_multiplier,
+                           2 ** (5 - i) * filters_multiplier, **casual),
+                    BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope),
+                    Conv2d(2 ** (5 - i) * filters_multiplier,
+                           2 ** (4 - i) * filters_multiplier, **bottleneck),
+                    BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope),
+                    Conv2d(2 ** (4 - i) * filters_multiplier,
+                           2 ** (5 - i) * filters_multiplier, **casual),
+                    BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope)),
+                    Sequential(
+                        Conv2d(2 ** (5 - i) * filters_multiplier, 2 ** (4 - i) * filters_multiplier, **bottleneck),
+                        BatchNorm2d(2 ** (4 - i) * filters_multiplier),
+                        LeakyReLU(negative_slope)),
+                    Sequential(
+                        Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
+                        BatchNorm2d(2 ** (5 - i) * filters_multiplier),
+                        LeakyReLU(negative_slope)),
+                    Sequential(Conv2d(2 ** (5 - i) * filters_multiplier, anchors_dims[i] * (number_of_classes + 5),
+                                      **prelude))]
+                +
+                [Sequential(
+                    Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (3 - i) * filters_multiplier, **bottleneck),
+                    BatchNorm2d(2 ** (3 - i) * filters_multiplier),
+                    LeakyReLU(negative_slope))] * (i < 2)
+            ) for i in range(self.num_of_yolo_layers)])
+
+    def forward(self, routes_hosts):
+        out = []
+        tensor = routes_hosts[-1]
+        for i in range(self.num_of_yolo_layers):
+            tensor = self.tails[i][0](tensor)
+            route_host = self.tails[i][1](tensor)
+            tensor = self.tails[i][2](route_host)
+            out.append(self.tails[i][3](tensor))
+            if i < 2:
+                tensor = interpolate(self.tails[i][4](route_host), scale_factor=2, mode="nearest")
+                tensor = cat((tensor, routes_hosts[-2 - i]), 1)
+        return out
 
 
 class Tail(Module):
@@ -130,10 +185,10 @@ class Head(Module):
     def forward(self, features):
         grid_size = list(features.size()[-2:])
         cells_offsets = stack(meshgrid(linspace(0, 1 - 1 / grid_size[0], grid_size[0]),
-                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)[...,[1,0]]
+                                       linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)[..., [1, 0]]
         features = features.view([-1, len(self.anchors), self.number_of_classes + 5] + grid_size) \
             .permute(0, 1, 3, 4, 2) \
-           # .contiguous()
+            # .contiguous()
         centers = sigmoid(features[..., :2]) / Tensor(grid_size) + cells_offsets
         sizes = exp(features[..., 2:4]) * self.anchors
         probabilities = sigmoid(features[..., 4:])
@@ -150,4 +205,3 @@ class Yolo(Module):
     def forward(self, image):
         features = self.feature_extractor(image)
         return self.head(self.tail(features)[0])
-
