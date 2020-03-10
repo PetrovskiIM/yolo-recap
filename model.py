@@ -36,28 +36,22 @@ prelude = {
 }
 
 
-class Module(Module):
-    def load_weights(self, flatten_weight):
-        print("1")
-
-
 def select_weights(cell, flatten_weights):
     size_expected_by_model = cell.size()
     length_expected_by_model = np.prod(size_expected_by_model)
-    return torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model),\
+    return torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model), \
            flatten_weights[length_expected_by_model:]
 
 
-def distribute_weights(module, flatten_weight, with_normalization=False):
+def distribute_weights(module, flatten_weight, number_of_layers_in_group=1, with_normalization=True):
     state = module.state_dict()
-    if with_normalization:
-        state["0.bias"], flatten_weight = select_weights(state["0.bias"], flatten_weight)
-    else:
-        state["0.bias"], flatten_weight = select_weights(state["0.bias"], flatten_weight)
-        state["0.weight"], flatten_weight = select_weights(state["0.weight"], flatten_weight)
-        state["0.running_mean"], flatten_weight = select_weights(state["0.running_mean"], flatten_weight)
-        state["0.running_var"], flatten_weight = select_weights(state["0.running_var"], flatten_weight)
-    state["0.weight"], flatten_weight = select_weights(state["0.weight"], flatten_weight)
+    for i in range(number_of_layers_in_group):
+        if not with_normalization:
+            state[f"{3 * i}.bias"], flatten_weight = select_weights(state[f"{3 * i}.bias"], flatten_weight)
+        else:
+            for ending in ["bias", "weight", "running_mean", "running_var"]:
+                state[f"{3 * i + 1}.{ending}"], flatten_weight = select_weights(state[f"{3 * i + 1}.{ending}"], flatten_weight)
+        state[f"{3 * i}.weight"], flatten_weight = select_weights(state[f"{3 * i}.weight"], flatten_weight)
     module.load_state_dict(state)
     return flatten_weight
 
@@ -94,15 +88,16 @@ class Darknet(Module):
 
     def load_weights(self, flatten_weight):
         flatten_weight = distribute_weights(self.intro, flatten_weight)
-        for i, num_of_repetitins in enumerate([1, 2, 8, 8, 4]):
+        for i, num_of_repetitions in enumerate([1, 2, 8, 8, 4]):
             flatten_weight = distribute_weights(self.module_list[i][0], flatten_weight)
-            for j in range(num_of_repetitins):
-                flatten_weight = distribute_weights(self.module_list[i][j + 1], flatten_weight)
+            for j in range(num_of_repetitions):
+                flatten_weight = distribute_weights(self.module_list[i][j + 1], flatten_weight, 2)
+        return flatten_weight
 
 
-class Tails(Module):
+class Tail(Module):
     def __init__(self, number_of_classes, anchors_dims):
-        super(Tails, self).__init__()
+        super(Tail, self).__init__()
         self.num_of_yolo_layers = 3
         route_streams = [0, 2 ** 3, 2 ** 2]
         self.tails = ModuleList([
@@ -156,68 +151,13 @@ class Tails(Module):
 
     def load_weight(self, flatten_weight):
         for i in range(self.num_of_yolo_layers):
-            flatten_weight = distribute_weights(self.tails[i][0], flatten_weight)
+            flatten_weight = distribute_weights(self.tails[i][0], flatten_weight, 4)
             flatten_weight = distribute_weights(self.tails[i][1], flatten_weight)
             flatten_weight = distribute_weights(self.tails[i][2], flatten_weight)
-            flatten_weight = distribute_weights(self.tails[i][3], flatten_weight)
+            flatten_weight = distribute_weights(self.tails[i][3], flatten_weight, with_normalization=False)
             if i < 2:
                 flatten_weight = distribute_weights(self.tails[i][4], flatten_weight)
-
-
-class Tail(Module):
-    def __init__(self, number_of_classes, anchors_dims):
-        super(Tail, self).__init__()
-        self.num_of_yolo_layers = 3
-        route_streams = [0, 2 ** 3, 2 ** 2]
-        self.harmonics = ModuleList([Sequential(
-            Conv2d((2 ** (5 - i) + route_streams[i]) * filters_multiplier,
-                   2 ** (4 - i) * filters_multiplier, **bottleneck),
-            BatchNorm2d(2 ** (4 - i) * filters_multiplier),
-            LeakyReLU(negative_slope),
-            Conv2d(2 ** (4 - i) * filters_multiplier,
-                   2 ** (5 - i) * filters_multiplier, **casual),
-            BatchNorm2d(2 ** (5 - i) * filters_multiplier),
-            LeakyReLU(negative_slope),
-            Conv2d(2 ** (5 - i) * filters_multiplier,
-                   2 ** (4 - i) * filters_multiplier, **bottleneck),
-            BatchNorm2d(2 ** (4 - i) * filters_multiplier),
-            LeakyReLU(negative_slope),
-            Conv2d(2 ** (4 - i) * filters_multiplier,
-                   2 ** (5 - i) * filters_multiplier, **casual),
-            BatchNorm2d(2 ** (5 - i) * filters_multiplier),
-            LeakyReLU(negative_slope)) for i in range(self.num_of_yolo_layers)])
-        self.splitted_harmonic = ModuleList([
-            ModuleList([
-                Sequential(
-                    Conv2d(2 ** (5 - i) * filters_multiplier, 2 ** (4 - i) * filters_multiplier, **bottleneck),
-                    BatchNorm2d(2 ** (4 - i) * filters_multiplier),
-                    LeakyReLU(negative_slope)),
-                Sequential(
-                    Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (5 - i) * filters_multiplier, **casual),
-                    BatchNorm2d(2 ** (5 - i) * filters_multiplier),
-                    LeakyReLU(negative_slope))]) for i in range(self.num_of_yolo_layers)])
-        self.preludes = ModuleList([
-            Conv2d(2 ** (5 - i) * filters_multiplier, anchors_dims[i] * (number_of_classes + 5), **prelude)
-            for i in range(self.num_of_yolo_layers)])
-        self.equalizers_for_routes = ModuleList([
-            Sequential(
-                Conv2d(2 ** (4 - i) * filters_multiplier, 2 ** (3 - i) * filters_multiplier, **bottleneck),
-                BatchNorm2d(2 ** (3 - i) * filters_multiplier),
-                LeakyReLU(negative_slope))
-            for i in range(self.num_of_yolo_layers - 1)])
-
-    def forward(self, routes_hosts):
-        out = []
-        tensor = routes_hosts[-1]
-        for i in range(self.num_of_yolo_layers):
-            tensor = self.harmonics[i](tensor)
-            route_host = self.splitted_harmonic[i][0](tensor)
-            tensor = self.splitted_harmonic[i][1](route_host)
-            out.append(self.preludes[i](tensor))
-            if i < 2:
-                tensor = interpolate(self.equalizers_for_routes[i](route_host), scale_factor=2, mode="nearest")
-                tensor = cat((tensor, routes_hosts[-2 - i]), 1)
-        return out
+        print(len(flatten_weight))
 
 
 class Head(Module):
@@ -230,9 +170,7 @@ class Head(Module):
         grid_size = list(features.size()[-2:])
         cells_offsets = stack(meshgrid(linspace(0, 1 - 1 / grid_size[0], grid_size[0]),
                                        linspace(0, 1 - 1 / grid_size[1], grid_size[1])), -1)[..., [1, 0]]
-        features = features.view([-1, len(self.anchors), self.number_of_classes + 5] + grid_size) \
-            .permute(0, 1, 3, 4, 2) \
-            # .contiguous()
+        features = features.view([-1, len(self.anchors), self.number_of_classes + 5] + grid_size).permute(0, 1, 3, 4, 2)
         centers = sigmoid(features[..., :2]) / Tensor(grid_size) + cells_offsets
         sizes = exp(features[..., 2:4]) * self.anchors
         probabilities = sigmoid(features[..., 4:])
