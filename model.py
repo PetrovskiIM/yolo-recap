@@ -50,7 +50,8 @@ def distribute_weights(module, flatten_weight, number_of_layers_in_group=1, with
             state[f"{3 * i}.bias"], flatten_weight = select_weights(state[f"{3 * i}.bias"], flatten_weight)
         else:
             for ending in ["bias", "weight", "running_mean", "running_var"]:
-                state[f"{3 * i + 1}.{ending}"], flatten_weight = select_weights(state[f"{3 * i + 1}.{ending}"], flatten_weight)
+                state[f"{3 * i + 1}.{ending}"], flatten_weight = select_weights(state[f"{3 * i + 1}.{ending}"],
+                                                                                flatten_weight)
         state[f"{3 * i}.weight"], flatten_weight = select_weights(state[f"{3 * i}.weight"], flatten_weight)
     module.load_state_dict(state)
     return flatten_weight
@@ -149,7 +150,7 @@ class Tail(Module):
                 tensor = cat((tensor, routes_hosts[-2 - i]), 1)
         return out
 
-    def load_weight(self, flatten_weight):
+    def load_weights(self, flatten_weight):
         for i in range(self.num_of_yolo_layers):
             flatten_weight = distribute_weights(self.tails[i][0], flatten_weight, 4)
             flatten_weight = distribute_weights(self.tails[i][1], flatten_weight)
@@ -157,7 +158,6 @@ class Tail(Module):
             flatten_weight = distribute_weights(self.tails[i][3], flatten_weight, with_normalization=False)
             if i < 2:
                 flatten_weight = distribute_weights(self.tails[i][4], flatten_weight)
-        print(len(flatten_weight))
 
 
 class Head(Module):
@@ -180,10 +180,28 @@ class Head(Module):
 class Yolo(Module):
     def __init__(self, anchors, anchors_dim, number_of_classes=1):
         super(Yolo, self).__init__()
+        self.number_of_classes = number_of_classes
         self.feature_extractor = Darknet()
         self.tail = Tail(number_of_classes, anchors_dim)
-        self.head = Head(anchors, number_of_classes)
+        self.heads = [Head(anchors[i], number_of_classes) for i in range(3)]
+        print(anchors[0])
+
+    def load_weights(self, flatten_weight):
+        self.tail.load_weights(self.feature_extractor.load_weights(flatten_weight))
 
     def forward(self, image):
         features = self.feature_extractor(image)
-        return self.head(self.tail(features)[0])
+        print(features[0].size())
+        print(features[1].size())
+        print(features[2].size())
+        centers_0, sizes_0, probabilities_0 = self.heads[0](features[0])
+        centers_1, sizes_1, probabilities_1 = self.heads[1](features[1])
+        centers_2, sizes_2, probabilities_2 = self.heads[2](features[2])
+        return {
+            "boxes": stack((cat((centers_0, sizes_0), -1).view(-1, 4),
+                            cat((centers_1, sizes_1), -1).view(-1, 4),
+                            cat((centers_2, sizes_2), -1).view(-1, 4))),
+            "scores": stack((probabilities_0.view(-1, 1 + self.number_of_classes),
+                             probabilities_1.view(-1, 1 + self.number_of_classes),
+                             probabilities_2.view(-1, 1 + self.number_of_classes)))
+        }
