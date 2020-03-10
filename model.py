@@ -1,6 +1,8 @@
+import numpy as np
+import torch
 from torch import Tensor, cat, sigmoid, exp, meshgrid, linspace, stack
 from torch.nn.functional import interpolate
-from torch.nn import Module, ModuleList, ModuleDict, Sequential, Conv2d, BatchNorm2d, LeakyReLU
+from torch.nn import Module, ModuleList, Sequential, Conv2d, BatchNorm2d, LeakyReLU
 
 filters_multiplier = 32
 negative_slope = 0.1
@@ -34,6 +36,32 @@ prelude = {
 }
 
 
+class Module(Module):
+    def load_weights(self, flatten_weight):
+        print("1")
+
+
+def select_weights(cell, flatten_weights):
+    size_expected_by_model = cell.size()
+    length_expected_by_model = np.prod(size_expected_by_model)
+    return torch.from_numpy(flatten_weights[:length_expected_by_model]).view(size_expected_by_model),\
+           flatten_weights[length_expected_by_model:]
+
+
+def distribute_weights(module, flatten_weight, with_normalization=False):
+    state = module.state_dict()
+    if with_normalization:
+        state["0.bias"], flatten_weight = select_weights(state["0.bias"], flatten_weight)
+    else:
+        state["0.bias"], flatten_weight = select_weights(state["0.bias"], flatten_weight)
+        state["0.weight"], flatten_weight = select_weights(state["0.weight"], flatten_weight)
+        state["0.running_mean"], flatten_weight = select_weights(state["0.running_mean"], flatten_weight)
+        state["0.running_var"], flatten_weight = select_weights(state["0.running_var"], flatten_weight)
+    state["0.weight"], flatten_weight = select_weights(state["0.weight"], flatten_weight)
+    module.load_state_dict(state)
+    return flatten_weight
+
+
 class Darknet(Module):
     def __init__(self):
         super(Darknet, self).__init__()
@@ -63,6 +91,13 @@ class Darknet(Module):
                 tensor += self.module_list[i][j + 1](tensor)
             outs.append(tensor)
         return outs[-3:]
+
+    def load_weights(self, flatten_weight):
+        flatten_weight = distribute_weights(self.intro, flatten_weight)
+        for i, num_of_repetitins in enumerate([1, 2, 8, 8, 4]):
+            flatten_weight = distribute_weights(self.module_list[i][0], flatten_weight)
+            for j in range(num_of_repetitins):
+                flatten_weight = distribute_weights(self.module_list[i][j + 1], flatten_weight)
 
 
 class Tails(Module):
@@ -118,6 +153,15 @@ class Tails(Module):
                 tensor = interpolate(self.tails[i][4](route_host), scale_factor=2, mode="nearest")
                 tensor = cat((tensor, routes_hosts[-2 - i]), 1)
         return out
+
+    def load_weight(self, flatten_weight):
+        for i in range(self.num_of_yolo_layers):
+            flatten_weight = distribute_weights(self.tails[i][0], flatten_weight)
+            flatten_weight = distribute_weights(self.tails[i][1], flatten_weight)
+            flatten_weight = distribute_weights(self.tails[i][2], flatten_weight)
+            flatten_weight = distribute_weights(self.tails[i][3], flatten_weight)
+            if i < 2:
+                flatten_weight = distribute_weights(self.tails[i][4], flatten_weight)
 
 
 class Tail(Module):
