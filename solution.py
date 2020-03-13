@@ -16,7 +16,7 @@ def solve(w0, h0, w1, h1):
         st += "the one part seems to work extreamly well"
         w, h, sina, cosa = solute(h0, w0, w1, h1, 0)
     elif ((w0 / h0) < (w1 / h1)) & (w0 / h0 < 1):
-        st+="need more ifs"
+        st += "need more ifs"
         w, h, cosa, sina = solute(w0, h0, w1, h1, 1)
     return w.real, h.real, np.array([[cosa.real, -sina.real],
                                      [sina.real, cosa.real]])
@@ -46,7 +46,6 @@ def solute(alpha_rotated_container_width,
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from solution import solve
 
 boxes = pd.read_csv("boxes.csv")[["center_x", "center_y", "width", "height", "45width", "45height"]]
 

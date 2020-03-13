@@ -131,8 +131,8 @@ for box in boxes.to_dict("records"):
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]),
                 np.array([box["center_x"], box["center_y"]]) - np.array([alpha_box["center_x"], alpha_box["center_y"]]))
         ) < 10:
-            box["45width"] = alpha_box["width"]  #  image.shape[1] / transformed_image.shape[1] * alpha_box["width"]
-            box["45height"] = alpha_box["height"] #  image.shape[0] / transformed_image.shape[0] * alpha_box["height"]
+            box["45width"] = alpha_box["width"]
+            box["45height"] = alpha_box["height"]
             paired_boxes.append(box)
             taked_in_accout = True
     if not taked_in_accout:
