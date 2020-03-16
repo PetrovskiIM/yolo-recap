@@ -1,6 +1,10 @@
 import cmath
 from cmath import sqrt
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+SQRT_OF_2 = sqrt(2)
 
 
 def solve(w0, h0, w1, h1):
@@ -33,19 +37,15 @@ def solute(alpha_rotated_container_width,
         h0, w0 = alpha_rotated_container_width, alpha_rotated_container_height
         h1, w1 = sum_rotated_container_width, sum_rotated_container_height
 
-    denominator = w0 ** 2 - sqrt(2) * w0 * w1 + w1 ** 2
-    cosa = sqrt(2 + (sqrt(w0 ** 2 * (2 * denominator - h0 ** 2)) - (h0 * w0) + sqrt(2) * h0 * w1) / denominator) / 2
+    denominator = w0 ** 2 - SQRT_OF_2 * w0 * w1 + w1 ** 2
+    cosa = sqrt(2 + (sqrt(w0 ** 2 * (2 * denominator - h0 ** 2)) - (h0 * w0) + SQRT_OF_2 * h0 * w1) / denominator) / 2
     sina = sqrt(1 - cosa ** 2)
-    w = (cosa + sina) * w0 - sqrt(2) * sina * w1
-    h = (sina - cosa) * w0 + sqrt(2) * cosa * w1
+    w = (cosa + sina) * w0 - SQRT_OF_2 * sina * w1
+    h = (sina - cosa) * w0 + SQRT_OF_2 * cosa * w1
     if axis == 0:
         return w, h, cosa, sina
     else:
         return h, w, cosa, sina
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
 boxes = pd.read_csv("boxes.csv")[["center_x", "center_y", "width", "height", "45width", "45height"]]
 

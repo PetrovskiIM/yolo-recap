@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import torchvision.transforms.functional as functional
 import math
 import numpy as np
-
 names = ["class_index", "center_x", "center_y", "width", "height"]
 
 
@@ -71,12 +70,11 @@ def coordinates_reverse_transform(boxes, angle, image, transformed_image):
 image_path = "/home/ivan/Desktop/angle/1003"
 image = cv2.imread(f"{image_path}.jpg")
 
-
 transformed_image_path = "/home/ivan/Desktop/angle/1003augmented"
 transformed_image = rotate_mirroring_corners(image, 45)
-cv2.imwrite(f"{transformed_image_path}.jpg", transformed_image, )
+cv2.imwrite(f"{transformed_image_path}.jpg", transformed_image)
 angle_in_radians = math.pi / 4
-# transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
+transformed_image = cv2.imread(f"{transformed_image_path}.jpg")
 
 scaled_boxes = pd.read_csv(f"{image_path}.txt", header=None, sep=' ').values
 scaled_transfromed_boxes = pd.read_csv(f"{image_path}augmented.txt", header=None, sep=' ').values
@@ -89,8 +87,8 @@ fig = plt.figure(dpi=380)
 ax = fig.add_subplot(1, 1, 1)
 for _, x, y, w, h in absolute_boxes:
     beta = math.pi/4
-    martrix = np.array([[math.cos(beta), -math.sin(beta)],[math.sin(beta), math.cos(beta)]])
-    coordinates = np.dot(np.array([[0, 0], [w, 0], [w, h], [0, h], [0, 0]]) - [w / 2, h / 2],martrix) + [x, y]
+    martrix = np.array([[math.cos(beta), -math.sin(beta)], [math.sin(beta), math.cos(beta)]])
+    coordinates = np.dot(np.array([[0, 0], [w, 0], [w, h], [0, h], [0, 0]]) - [w / 2, h / 2], martrix) + [x, y]
     ax.plot(coordinates[:, 0], coordinates[:, 1], color="r")
 
 for _, x, y, w, h in absolute_transformed_boxes:
