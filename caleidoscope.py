@@ -96,6 +96,7 @@ for _, x, y, w, h in absolute_transformed_boxes:
     ax.plot(coordinates[:, 0], coordinates[:, 1], color="b")
 plt.imshow(transformed_image)
 plt.show()
+# endregion
 
 angle_in_radians = -math.pi / 4
 scaled_transfromed_boxes = pd.read_csv(f"{image_path}augmented.txt", header=None, sep=' ').values
@@ -113,6 +114,7 @@ for _, x, y, w, h in absolute_transformed_boxes:
     ax.plot([x], [y], "r+", color="b")
 plt.imshow(image)
 plt.show()
+# endregion
 
 boxes = pd.DataFrame(absolute_boxes, columns=["class_index", "center_x", "center_y", "width", "height"]).astype(float)
 alphta_boxes = pd.DataFrame(absolute_transformed_boxes,
@@ -137,9 +139,3 @@ for box in boxes.to_dict("records"):
         paired_boxes.append(box)
 
 pd.DataFrame.from_records(paired_boxes, index=None).to_csv("boxes.csv")
-# boxes.loc[boxes["width"] > boxes["height"]]
-# for box in boxes.to_dict("records"):
-#     if len(box["correspondence"]):
-#         if (box["width"]>box["height"]) & box["correspondence"]["width"]/box["correspondence"]["height"]
-#     else:
-#         classes.append("?")

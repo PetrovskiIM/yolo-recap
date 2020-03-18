@@ -47,6 +47,7 @@ def solute(alpha_rotated_container_width,
     else:
         return h, w, cosa, sina
 
+
 boxes = pd.read_csv("boxes.csv")[["center_x", "center_y", "width", "height", "45width", "45height"]]
 
 ws = []
